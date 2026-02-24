@@ -30,8 +30,14 @@ export default function Layout({ children, title, showBack = false }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 max-w-lg mx-auto">
-      {/* Top bar */}
-      <header className="bg-brand-dark text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-20 shadow-md">
+      {/* Top bar
+          — style paddingTop uses env(safe-area-inset-top) so the header
+            sits below the Dynamic Island / notch on any iPhone model.
+            The inner content always gets 12px (py-3) below the safe area. */}
+      <header
+        className="bg-brand-dark text-white px-4 flex items-center gap-3 sticky top-0 z-20 shadow-md"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
+      >
         {showBack ? (
           <button onClick={() => navigate(-1)} className="p-1 -ml-1 rounded-lg active:bg-brand-mid">
             <ChevronLeft className="w-6 h-6" />
@@ -51,13 +57,24 @@ export default function Layout({ children, title, showBack = false }) {
         </button>
       </header>
 
-      {/* Page content */}
-      <main className="flex-1 overflow-y-auto pb-20">
+      {/* Page content
+          — pb uses safe-area-inset-bottom so content never hides behind
+            the bottom nav + iOS home indicator. */}
+      <main
+        className="flex-1 overflow-y-auto"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 80px)' }}
+      >
         {children}
       </main>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex z-20">
+      {/* Bottom nav
+          — pb uses safe-area-inset-bottom so the nav tabs sit above the
+            iOS home indicator and Android gesture bar, preventing accidental
+            swipe-back gestures from triggering tab taps. */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex z-20"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         {tabs.map(({ path, icon: Icon, labelKey }) => {
           const active = location.pathname === path;
           return (
