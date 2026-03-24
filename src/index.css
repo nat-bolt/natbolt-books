@@ -2,10 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Dagger Square — NatBolt brand display font ─────────────────────────────
+ * Loaded from /public/fonts/daggersquare.ttf (self-hosted, no Google Fonts needed)
+ * Used via Tailwind utility class: font-display
+ * Applied to: app name in header, page titles, login screen heading
+ */
+@font-face {
+  font-family: 'Dagger Square';
+  src: url('public/fonts/daggersquare.ttf') format('truetype');
+  font-weight: 400 700;   /* covers both regular and bold weight calls */
+  font-style: normal;
+  font-display: swap;     /* show fallback font instantly, swap when loaded */
+}
+
 @layer base {
   * { box-sizing: border-box; }
   body {
-    @apply bg-gray-50 text-gray-900;
+    /* NatBolt warm off-white surface — matches brand guidelines */
+    background-color: #F5F0EB;
+    @apply text-gray-900;
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }

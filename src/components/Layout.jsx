@@ -29,7 +29,7 @@ export default function Layout({ children, title, showBack = false }) {
   const langLabel = { en: 'EN', hi: 'हि', te: 'తె' };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 max-w-lg mx-auto">
+    <div className="min-h-screen flex flex-col max-w-lg mx-auto" style={{ backgroundColor: '#F5F0EB' }}>
       {/* Top bar
           — style paddingTop uses env(safe-area-inset-top) so the header
             sits below the Dynamic Island / notch on any iPhone model.
@@ -45,7 +45,7 @@ export default function Layout({ children, title, showBack = false }) {
         ) : (
           <div className="w-7" />
         )}
-        <h1 className="flex-1 text-lg font-bold truncate">
+        <h1 className="flex-1 text-xl font-display tracking-wider truncate uppercase">
           {title || t('appName')}
         </h1>
         <button
@@ -72,8 +72,8 @@ export default function Layout({ children, title, showBack = false }) {
             iOS home indicator and Android gesture bar, preventing accidental
             swipe-back gestures from triggering tab taps. */}
       <nav
-        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex z-20"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex z-20"
+        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {tabs.map(({ path, icon: Icon, labelKey }) => {
           const active = location.pathname === path;
@@ -84,7 +84,7 @@ export default function Layout({ children, title, showBack = false }) {
               className={`flex-1 flex flex-col items-center py-2 text-xs font-medium transition-colors
                 ${active
                   ? 'text-brand-mid border-t-2 border-brand-mid -mt-px'
-                  : 'text-gray-500 hover:text-brand-mid'}`}
+                  : 'text-gray-400 hover:text-brand-mid'}`}
             >
               <Icon className="w-5 h-5 mb-0.5" />
               {t(labelKey)}

@@ -104,17 +104,23 @@ export default function Login() {
   };
 
   return (
+    // Same layout as before — full screen, centered card, gradient background.
+    // Only changes: gradient now uses brand black→orange, real icon replaces emoji,
+    // accent colours updated to #f06022, brand-light tint updated.
     <div className="min-h-screen bg-gradient-to-b from-brand-dark to-brand-mid flex flex-col items-center justify-center p-6">
-      {/* Logo */}
+
+      {/* Logo — same position/size as original, emoji replaced by real brand icon */}
       <div className="text-center mb-8">
-        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-          <span className="text-4xl">🔧</span>
-        </div>
-        <h1 className="text-3xl font-bold text-white">{t('appName')}</h1>
-        <p className="text-brand-light text-sm mt-1">{t('appTagline')}</p>
+        <img
+          src="/icons/icon-192.png"
+          alt="NatBolt"
+          className="w-20 h-20 rounded-3xl mx-auto mb-4 shadow-xl"
+        />
+        <h1 className="font-display text-4xl text-white tracking-widest uppercase">{t('appName')}</h1>
+        <p className="text-brand-light text-sm mt-1 opacity-80">{t('appTagline')}</p>
       </div>
 
-      {/* Card */}
+      {/* Card — same max-w-sm centered white card, no structural change */}
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6">
         {step === 'phone' ? (
           <>
