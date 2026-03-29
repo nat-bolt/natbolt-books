@@ -26,8 +26,11 @@ export default function App() {
   const { setUser, setShop, setIsAdmin, setAuthLoading } = useStore();
 
   useEffect(() => {
+    let isMounted = true; // Track mount status to prevent state updates after unmount
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        if (!isMounted) return; // Component unmounted, abort
         setUser(firebaseUser);
 
         try {
@@ -35,6 +38,8 @@ export default function App() {
           // Replaces the previous two sequential calls (is_admin → shop SELECT).
           // Returns: { is_admin: bool, shop: { ...all columns } | null }
           const { data: ctx, error: ctxErr } = await supabase.rpc('get_user_context');
+
+          if (!isMounted) return; // Component unmounted during async call, abort
 
           if (ctxErr) {
             console.error('get_user_context error:', ctxErr.message);
@@ -48,17 +53,26 @@ export default function App() {
             // ctx.shop === null → no shop yet → ProtectedRoute sends to /setup or /pending
           }
         } catch (err) {
-          console.error('Auth init error:', err);
+          if (isMounted) {
+            console.error('Auth init error:', err);
+          }
         }
       } else {
         // Signed out — reset everything
+        if (!isMounted) return;
         setUser(null);
         setShop(null);
         setIsAdmin(false);
       }
-      setAuthLoading(false);
+      if (isMounted) {
+        setAuthLoading(false);
+      }
     });
-    return unsubscribe;
+
+    return () => {
+      isMounted = false; // Mark as unmounted
+      unsubscribe();
+    };
   }, []);
 
   return (

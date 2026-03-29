@@ -17,11 +17,33 @@ let recaptchaVerifierSingleton = null;
 
 function getVerifier() {
   if (!recaptchaVerifierSingleton) {
-    recaptchaVerifierSingleton = new RecaptchaVerifier(
-      auth,
-      'recaptcha-container',
-      { size: 'invisible', callback: () => {} }
-    );
+    try {
+      recaptchaVerifierSingleton = new RecaptchaVerifier(
+        auth,
+        'recaptcha-container',
+        {
+          size: 'invisible',
+          callback: (response) => {
+            // reCAPTCHA solved successfully (removed token logging for security)
+            if (import.meta.env.DEV) {
+              console.log('[DEBUG] reCAPTCHA verification successful');
+            }
+          },
+          'expired-callback': () => {
+            if (import.meta.env.DEV) {
+              console.log('[DEBUG] reCAPTCHA expired, resetting');
+            }
+            resetVerifier();
+          }
+        }
+      );
+      if (import.meta.env.DEV) {
+        console.log('[DEBUG] RecaptchaVerifier initialized');
+      }
+    } catch (error) {
+      console.error('Failed to create RecaptchaVerifier:', error);
+      throw error;
+    }
   }
   return recaptchaVerifierSingleton;
 }
@@ -44,14 +66,13 @@ export default function Login() {
   const [confirmResult, setConfirmResult] = useState(null);
 
   // ── Pre-warm RecaptchaVerifier on mount ───────────────────────────────────
-  // Invisible reCAPTCHA still makes a background round-trip to Google to register.
-  // Doing it here (while the user is typing their phone number) means that
-  // network call is already done by the time they tap "Send OTP" — eliminating
-  // the visible delay between tap and OTP arriving.
-  // Cleanup on unmount prevents a stale verifier if the user navigates away and back.
+  // Only pre-warm if NOT in test mode
   useEffect(() => {
-    getVerifier();
-    return () => resetVerifier();
+    const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
+    if (!isTestMode) {
+      getVerifier();
+      return () => resetVerifier();
+    }
   }, []);
 
   const handleSendOtp = async () => {
@@ -62,17 +83,46 @@ export default function Login() {
     }
     setError('');
     setLoading(true);
-    // Do NOT reset verifier here — use the pre-warmed singleton.
-    // resetVerifier() is only called on error (below) so the user can retry.
+
     try {
       const fullPhone = `+91${cleaned}`;
-      const result = await signInWithPhoneNumber(auth, fullPhone, getVerifier());
+      // Only log in development (removed phone number from logs for privacy)
+      if (import.meta.env.DEV) {
+        console.log('[DEBUG] Initiating OTP send');
+      }
+
+      // Check if test mode is enabled
+      const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
+
+      // In test mode: pass null (no verifier)
+      // In production: use RecaptchaVerifier
+      const verifier = isTestMode ? null : getVerifier();
+
+      const result = await signInWithPhoneNumber(auth, fullPhone, verifier);
       setConfirmResult(result);
       setStep('otp');
+      if (import.meta.env.DEV) {
+        console.log('[DEBUG] OTP sent successfully');
+      }
     } catch (err) {
       console.error('sendOtp error:', err);
-      setError(err.message || t('common.error'));
-      resetVerifier(); // Reset only on failure so user can retry with a fresh verifier
+      // Better error messages for common issues
+      let errorMsg = err.message || t('common.error');
+      if (err.code === 'auth/invalid-phone-number') {
+        errorMsg = 'Invalid phone number. Please check and try again.';
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMsg = 'Too many attempts. Please try again later.';
+      } else if (err.code === 'auth/quota-exceeded') {
+        errorMsg = 'SMS quota exceeded. Please try again later.';
+      } else if (err.code === 'auth/captcha-check-failed') {
+        errorMsg = 'reCAPTCHA verification failed. Please refresh and try again.';
+      }
+      setError(errorMsg);
+
+      const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
+      if (!isTestMode) {
+        resetVerifier(); // Reset on failure so user can retry
+      }
     } finally {
       setLoading(false);
     }
@@ -200,8 +250,8 @@ export default function Login() {
         )}
       </div>
 
-      {/* Invisible reCAPTCHA container */}
-      <div id="recaptcha-container" />
+      {/* reCAPTCHA container - invisible, works in background */}
+      <div id="recaptcha-container" className="mt-4" />
     </div>
   );
 }

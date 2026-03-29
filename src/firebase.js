@@ -20,15 +20,21 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID             || "YOUR_APP_ID",
 };
 
-const app    = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db   = getFirestore(app);
+export const db = getFirestore(app);
 
-// ── Development: disable reCAPTCHA for test phone numbers ──────────────────────
-// This lets Firebase test phone numbers work without a real reCAPTCHA solve.
-// Remove or guard this before deploying to production.
+// ── Development: Test Mode for Localhost ──────────────────────────────────────
+// Enable test mode for development to bypass reCAPTCHA and SMS sending.
+// Add test phone numbers in Firebase Console: Authentication → Phone → Test numbers
+// Example: +919999999999 with OTP 123456
+//
+// PRODUCTION: Test mode is automatically disabled (import.meta.env.DEV = false)
+// Production uses real phone numbers with invisible reCAPTCHA verification.
 if (import.meta.env.DEV) {
   auth.settings.appVerificationDisabledForTesting = true;
+  console.log('🧪 Test mode enabled - use test phone numbers from Firebase Console');
+  console.log('📝 Add test numbers: Firebase Console → Authentication → Sign-in method → Phone');
 }
 
 export default app;

@@ -64,6 +64,7 @@ desktop.ini
 *.swo
 *.sw?
 *.orig
+*.claude
 
 # ── Testing & Coverage ────────────────────────────────────────────────────────
 coverage/
