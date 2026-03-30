@@ -6,7 +6,7 @@ import {
   signInWithPhoneNumber,
 } from 'firebase/auth';
 import { Smartphone, KeyRound } from 'lucide-react';
-import { auth } from '../firebase';
+import { auth, isTestPhoneNumber, setTestMode } from '../firebase';
 // No Supabase session setup needed — accessToken factory in supabase.js handles it.
 import useStore from '../store/useStore';
 
@@ -22,11 +22,11 @@ function getVerifier() {
         auth,
         'recaptcha-container',
         {
-          size: 'invisible',
+          size: 'invisible',  // Invisible reCAPTCHA - no checkbox needed
           callback: (response) => {
-            // reCAPTCHA solved successfully (removed token logging for security)
+            // reCAPTCHA solved successfully
             if (import.meta.env.DEV) {
-              console.log('[DEBUG] reCAPTCHA verification successful');
+              console.log('[DEBUG] reCAPTCHA v2 verification successful');
             }
           },
           'expired-callback': () => {
@@ -34,11 +34,17 @@ function getVerifier() {
               console.log('[DEBUG] reCAPTCHA expired, resetting');
             }
             resetVerifier();
+          },
+          'error-callback': (error) => {
+            if (import.meta.env.DEV) {
+              console.error('[DEBUG] reCAPTCHA error:', error);
+            }
+            resetVerifier();
           }
         }
       );
       if (import.meta.env.DEV) {
-        console.log('[DEBUG] RecaptchaVerifier initialized');
+        console.log('[DEBUG] RecaptchaVerifier initialized (invisible mode)');
       }
     } catch (error) {
       console.error('Failed to create RecaptchaVerifier:', error);
@@ -66,6 +72,10 @@ function resetVerifier() {
   if (container) {
     container.innerHTML = '';
   }
+
+  if (import.meta.env.DEV) {
+    console.log('[DEBUG] RecaptchaVerifier reset complete');
+  }
 }
 
 export default function Login() {
@@ -80,14 +90,10 @@ export default function Login() {
   const [error, setError]             = useState('');
   const [confirmResult, setConfirmResult] = useState(null);
 
-  // ── Pre-warm RecaptchaVerifier on mount ───────────────────────────────────
-  // Only pre-warm if NOT in test mode
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
-    const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
-    if (!isTestMode) {
-      getVerifier();
-      return () => resetVerifier();
-    }
+    // Cleanup verifier when component unmounts
+    return () => resetVerifier();
   }, []);
 
   const handleSendOtp = async () => {
@@ -101,17 +107,31 @@ export default function Login() {
 
     try {
       const fullPhone = `+91${cleaned}`;
-      // Only log in development (removed phone number from logs for privacy)
+
+      // ── Smart Test Mode Detection ─────────────────────────────────────────────
+      // Check if this is a test number → enable test mode (no reCAPTCHA, Firebase test OTP)
+      // Otherwise → production mode (reCAPTCHA + real SMS)
+      const isTestNum = isTestPhoneNumber(fullPhone);
+      setTestMode(isTestNum);
+
       if (import.meta.env.DEV) {
-        console.log('[DEBUG] Initiating OTP send');
+        console.log(`[DEBUG] ${isTestNum ? '🧪 Test number detected' : '📱 Real number detected'} - Initiating OTP send`);
       }
 
-      // Check if test mode is enabled
-      const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
+      // For production mode, ensure we have a fresh verifier
+      let verifier = null;
+      if (!isTestNum) {
+        // Reset and recreate verifier for production mode to ensure clean state
+        resetVerifier();
+        verifier = getVerifier();
 
-      // In test mode: pass null (no verifier)
-      // In production: use RecaptchaVerifier
-      const verifier = isTestMode ? null : getVerifier();
+        if (import.meta.env.DEV) {
+          console.log('[DEBUG] Using fresh RecaptchaVerifier for production mode');
+        }
+
+        // Wait for verifier to fully render before proceeding
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       const result = await signInWithPhoneNumber(auth, fullPhone, verifier);
       setConfirmResult(result);
@@ -121,22 +141,30 @@ export default function Login() {
       }
     } catch (err) {
       console.error('sendOtp error:', err);
+
       // Better error messages for common issues
       let errorMsg = err.message || t('common.error');
       if (err.code === 'auth/invalid-phone-number') {
         errorMsg = 'Invalid phone number. Please check and try again.';
       } else if (err.code === 'auth/too-many-requests') {
-        errorMsg = 'Too many attempts. Please try again later.';
+        errorMsg = 'Too many login attempts. Please wait 15-30 minutes and try again, or use a different phone number.';
       } else if (err.code === 'auth/quota-exceeded') {
-        errorMsg = 'SMS quota exceeded. Please try again later.';
+        errorMsg = 'Daily SMS limit reached. Please try again tomorrow or contact support.';
       } else if (err.code === 'auth/captcha-check-failed') {
-        errorMsg = 'reCAPTCHA verification failed. Please refresh and try again.';
+        errorMsg = 'Security verification failed. Please refresh the page and try again.';
+      } else if (err.code === 'auth/argument-error') {
+        errorMsg = 'Configuration error. Please refresh the page or contact support.';
+      } else if (err.message && err.message.includes('INVALID_RECAPTCHA_TOKEN')) {
+        errorMsg = 'reCAPTCHA verification failed. Please complete the verification and try again.';
+        // Don't reset verifier immediately - user might need to interact with visible CAPTCHA
       }
       setError(errorMsg);
 
-      const isTestMode = import.meta.env.DEV && auth.settings.appVerificationDisabledForTesting;
-      if (!isTestMode) {
-        resetVerifier(); // Reset on failure so user can retry
+      // Always reset verifier on error for production mode to allow fresh retry
+      // Exception: INVALID_RECAPTCHA_TOKEN might need the existing verifier to show visible CAPTCHA
+      if (!auth.settings.appVerificationDisabledForTesting &&
+          !(err.message && err.message.includes('INVALID_RECAPTCHA_TOKEN'))) {
+        resetVerifier();
       }
     } finally {
       setLoading(false);
@@ -265,8 +293,8 @@ export default function Login() {
         )}
       </div>
 
-      {/* reCAPTCHA container - invisible, works in background */}
-      <div id="recaptcha-container" className="mt-4" />
+      {/* reCAPTCHA container - invisible, no UI shown */}
+      <div id="recaptcha-container" />
     </div>
   );
 }

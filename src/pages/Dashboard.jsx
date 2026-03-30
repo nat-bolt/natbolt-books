@@ -9,8 +9,9 @@ import { supabase, mapBill } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import { exportBillsCSV } from '../utils/exportCsv';
+import { FREE_BILL_LIMIT } from '../config';
 
-const FREE_LIMIT = 30;
+const FREE_LIMIT = FREE_BILL_LIMIT;
 
 // ── Upgrade modal (shown when free user taps a paid feature) ──────────────────
 function UpgradeModal({ feature, onClose, onUpgrade }) {
@@ -66,29 +67,41 @@ export default function Dashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('bills')
-        .select('*')
-        .eq('shop_id', shop.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      if (error) throw error;
-      const data2 = (data || []).map(mapBill);
-      setBills(data2);
-
-      // Compute stats
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+      // ── Two parallel queries ──────────────────────────────────────────────────
+      // 1. Recent 30 bills for the visible list (display only)
+      // 2. All bills from start of month for accurate stats
+      //    (only fetches the fields needed — avoids downloading full rows)
+      const [listResult, statsResult] = await Promise.all([
+        supabase
+          .from('bills')
+          .select('*')
+          .eq('shop_id', shop.id)
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('bills')
+          .select('id, type, status, grand_total, created_at')
+          .eq('shop_id', shop.id)
+          .gte('created_at', startOfMonth.toISOString()),
+      ]);
+
+      if (listResult.error) throw listResult.error;
+      if (statsResult.error) throw statsResult.error;
+
+      setBills((listResult.data || []).map(mapBill));
+
+      // Compute accurate stats from the full month dataset
       let todayCount = 0, monthCount = 0, revenue = 0;
-      data2.forEach((b) => {
-        const createdAt = new Date(b.createdAt);
+      (statsResult.data || []).forEach((b) => {
+        const createdAt = new Date(b.created_at);
+        monthCount++;
         if (createdAt >= startOfToday) todayCount++;
-        if (createdAt >= startOfMonth) monthCount++;
         if (b.type === 'bill' && b.status !== 'void') {
-          revenue += b.grandTotal || 0;
+          revenue += Number(b.grand_total || 0);
         }
       });
       setStats({ today: todayCount, month: monthCount, revenue });

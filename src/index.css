@@ -9,7 +9,7 @@
  */
 @font-face {
   font-family: 'Dagger Square';
-  src: url('public/fonts/daggersquare.ttf') format('truetype');
+  src: url('/fonts/daggersquare.ttf') format('truetype');
   font-weight: 400 700;   /* covers both regular and bold weight calls */
   font-style: normal;
   font-display: swap;     /* show fallback font instantly, swap when loaded */

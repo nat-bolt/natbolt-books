@@ -54,11 +54,15 @@ function CustomerModal({ onSelect, onClose }) {
     if (val.length < 3) { setResults([]); return; }
     setLoading(true);
     try {
+      // Sanitize before interpolating into the PostgREST filter string.
+      // Strips characters that have special meaning in PostgREST filter syntax
+      // (parentheses = grouping, comma = condition separator, backslash = escape).
+      const safe = val.replace(/[(),\\]/g, '');
       const { data } = await supabase
         .from('customers')
         .select('*')
         .eq('shop_id', shop.id)
-        .or(`name.ilike.%${val}%,phone.ilike.%${val}%`);
+        .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
       setResults((data || []).map(mapCustomer));
     } catch (err) { console.error(err); }
     finally { setLoading(false); }

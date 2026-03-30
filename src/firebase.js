@@ -24,17 +24,32 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// ── Development: Test Mode for Localhost ──────────────────────────────────────
-// Enable test mode for development to bypass reCAPTCHA and SMS sending.
-// Add test phone numbers in Firebase Console: Authentication → Phone → Test numbers
-// Example: +919999999999 with OTP 123456
-//
-// PRODUCTION: Test mode is automatically disabled (import.meta.env.DEV = false)
-// Production uses real phone numbers with invisible reCAPTCHA verification.
-if (import.meta.env.DEV) {
-  auth.settings.appVerificationDisabledForTesting = true;
-  console.log('🧪 Test mode enabled - use test phone numbers from Firebase Console');
-  console.log('📝 Add test numbers: Firebase Console → Authentication → Sign-in method → Phone');
+// ── Test Phone Numbers ────────────────────────────────────────────────────────
+// Add your test numbers here (must also be configured in Firebase Console)
+// Firebase Console → Authentication → Sign-in method → Phone → Test numbers
+// Only populated in development builds — production bundles get an empty array.
+const TEST_PHONE_NUMBERS = import.meta.env.DEV
+  ? [
+      '+919876543210',  // Your test number (configure in Firebase Console with OTP: 123456)
+      // Add more test numbers here as needed
+    ]
+  : [];
+
+// ── Smart Test Mode Detection ─────────────────────────────────────────────────
+// Helper function to check if a phone number is a test number
+export function isTestPhoneNumber(phoneNumber) {
+  return TEST_PHONE_NUMBERS.includes(phoneNumber);
 }
+
+// Helper function to enable/disable test mode dynamically
+export function setTestMode(enabled) {
+  auth.settings.appVerificationDisabledForTesting = enabled;
+  if (import.meta.env.DEV) {
+    console.log(enabled ? '🧪 Test mode enabled' : '📱 Production mode enabled (reCAPTCHA + real SMS)');
+  }
+}
+
+// Default: production mode (will be enabled per-login in Login.jsx)
+auth.settings.appVerificationDisabledForTesting = false;
 
 export default app;

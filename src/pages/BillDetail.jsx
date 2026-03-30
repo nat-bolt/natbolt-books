@@ -41,21 +41,21 @@ export default function BillDetail() {
       const billMapped = mapBill(billData);
       setBill(billMapped);
 
-      if (billMapped.customerId) {
-        const { data: custData } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('id', billMapped.customerId)
-          .single();
-        if (custData) setCustomer(mapCustomer(custData));
-      }
+      // ── Fetch customer and generate UPI QR in parallel ────────────────────
+      const [custResult, qrDataUrl] = await Promise.all([
+        billMapped.customerId
+          ? supabase.from('customers').select('*').eq('id', billMapped.customerId).single()
+          : Promise.resolve({ data: null }),
+        shop?.upiId && billMapped.grandTotal
+          ? QRCode.toDataURL(
+              `upi://pay?pa=${shop.upiId}&pn=${encodeURIComponent(shop.shopName || '')}&am=${Number(billMapped.grandTotal).toFixed(2)}&cu=INR`,
+              { width: 200, margin: 2 }
+            )
+          : Promise.resolve(''),
+      ]);
 
-      // Generate UPI QR
-      if (shop?.upiId && billMapped.grandTotal) {
-        const upi = `upi://pay?pa=${shop.upiId}&pn=${encodeURIComponent(shop.shopName || '')}&am=${Number(billMapped.grandTotal).toFixed(2)}&cu=INR`;
-        const url = await QRCode.toDataURL(upi, { width: 200, margin: 2 });
-        setQrUrl(url);
-      }
+      if (custResult.data) setCustomer(mapCustomer(custResult.data));
+      if (qrDataUrl) setQrUrl(qrDataUrl);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -73,7 +73,8 @@ export default function BillDetail() {
           paid_amount:  paid,
           balance_due:  Math.max(0, bill.grandTotal - paid),
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('shop_id', shop.id);
 
       if (!error) {
         setBill((b) => ({
@@ -93,7 +94,8 @@ export default function BillDetail() {
     const { error } = await supabase
       .from('bills')
       .update({ status: 'void' })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('shop_id', shop.id);
 
     if (!error) setBill((b) => ({ ...b, status: 'void' }));
   };

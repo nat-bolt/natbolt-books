@@ -9,8 +9,22 @@ import {
 import { auth } from '../firebase';
 import { supabase, mapShop } from '../supabase';
 import useStore from '../store/useStore';
+import { FREE_BILL_LIMIT } from '../config';
 
-const FREE_LIMIT = 30;
+const FREE_LIMIT = FREE_BILL_LIMIT;
+
+// ── URL safety helper ─────────────────────────────────────────────────────────
+// Ensures URLs rendered as <a href> are limited to http/https, preventing
+// javascript: or data: URLs from being stored or rendered.
+function isSafeUrl(url) {
+  if (!url) return true; // empty/null is fine
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false; // not a valid URL at all
+  }
+}
 
 // ── Create / Edit Shop Modal ──────────────────────────────────────────────────
 function ShopFormModal({ existing, onSave, onClose }) {
@@ -77,6 +91,10 @@ function ShopFormModal({ existing, onSave, onClose }) {
   const handleSave = async () => {
     if (!form.shopName.trim()) { setError('Shop name is required'); return; }
     if (!form.phone.trim())    { setError('Phone number is required'); return; }
+    if (form.mapsUrl.trim() && !isSafeUrl(form.mapsUrl.trim())) {
+      setError('Google Maps link must be a valid https:// URL');
+      return;
+    }
 
     const rawPhone = form.phone.replace(/\D/g, '');
     const e164 = rawPhone.startsWith('91') ? `+${rawPhone}` : `+91${rawPhone}`;
@@ -721,7 +739,7 @@ export default function AdminPanel() {
                         {shop.pincode && (
                           <p className="text-xs text-indigo-600 font-semibold">📍 {shop.pincode}</p>
                         )}
-                        {shop.mapsUrl && (
+                        {shop.mapsUrl && isSafeUrl(shop.mapsUrl) && (
                           <a
                             href={shop.mapsUrl}
                             target="_blank"

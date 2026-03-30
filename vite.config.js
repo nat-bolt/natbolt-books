@@ -1,5 +1,15 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// Allow ngrok and other public URLs to access Vite dev/preview servers
+const allowedHosts = [
+  'localhost',
+  '127.0.0.1',
+  '.ngrok-free.dev',
+  '.ngrok.io',
+  '.vercel.app',
+  '.netlify.app'
+];
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -10,4 +20,12 @@ export default defineConfig({
     // write-protected on certain mounted filesystems.
     emptyOutDir: false,
   },
-})
+  server: {
+    host: true,
+    allowedHosts: allowedHosts,
+  },
+  preview: {
+    host: true,
+    allowedHosts: allowedHosts,
+  }
+});
