@@ -49,8 +49,23 @@ function getVerifier() {
 }
 
 function resetVerifier() {
-  try { recaptchaVerifierSingleton?.clear(); } catch (_) {}
+  try {
+    if (recaptchaVerifierSingleton) {
+      recaptchaVerifierSingleton.clear();
+    }
+  } catch (e) {
+    // Ignore cleanup errors
+    if (import.meta.env.DEV) {
+      console.log('[DEBUG] Verifier cleanup error (safe to ignore):', e.message);
+    }
+  }
   recaptchaVerifierSingleton = null;
+
+  // Also clear the DOM container to ensure clean state
+  const container = document.getElementById('recaptcha-container');
+  if (container) {
+    container.innerHTML = '';
+  }
 }
 
 export default function Login() {
