@@ -1,6 +1,6 @@
 /**
  * exportCsv.js
- * Client-side CSV export for NatBolt Book bills — no external library needed.
+ * Client-side CSV export for NatBolt Billu bills — no external library needed.
  *
  * Usage:
  *   exportBillsCSV(bills, shop)          → downloads "NatBolt_Bills_<month>.csv"

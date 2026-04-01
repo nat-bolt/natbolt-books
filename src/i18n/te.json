@@ -1,10 +1,10 @@
 {
-  "appName": "NatBolt Book",
+  "appName": "NatBolt Billu",
   "appTagline": "టూ-వీలర్ సర్వీస్ బిల్లింగ్",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {
-    "title": "NatBolt Bookలో సైన్ ఇన్ చేయండి",
+    "title": "NatBolt Billuలో సైన్ ఇన్ చేయండి",
     "subtitle": "టూ-వీలర్ సర్వీస్ బిల్లింగ్",
     "phoneLabel": "మొబైల్ నంబర్",
     "phonePlaceholder": "10 అంకెల మొబైల్ నంబర్",
@@ -172,7 +172,7 @@
     "paidPlan": "పెయిడ్ ప్లాన్ (అపరిమితం)",
     "upgradePlan": "పెయిడ్ కి అప్‌గ్రేడ్ చేయండి — ₹299/నెల",
     "logout": "సైన్ అవుట్",
-    "logoutConfirm": "NatBolt Book నుండి సైన్ అవుట్ చేయాలా?",
+    "logoutConfirm": "NatBolt Billu నుండి సైన్ అవుట్ చేయాలా?",
     "save": "మార్పులు సేవ్ చేయండి",
     "saving": "సేవ్ అవుతోంది...",
     "saved": "మార్పులు సేవ్ చేయబడ్డాయి!"
@@ -267,7 +267,7 @@
     "sgst": "SGST (9%)",
     "grandTotal": "మొత్తం మొత్తం",
     "payVia": "UPI ద్వారా చెల్లించండి",
-    "poweredBy": "NatBolt Book ద్వారా నడపబడుతోంది",
+    "poweredBy": "NatBolt Billu ద్వారా నడపబడుతోంది",
     "thankYou": "మీ వ్యాపారానికి ధన్యవాదాలు!"
   }
 }

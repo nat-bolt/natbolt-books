@@ -90,8 +90,13 @@ export default function Login() {
   const [error, setError]             = useState('');
   const [confirmResult, setConfirmResult] = useState(null);
 
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  // ── Pre-warm reCAPTCHA verifier on mount ──────────────────────────────────
+  // Initialize the verifier BEFORE user clicks button, so the Google round-trip
+  // completes while they're typing their phone number = instant OTP send
   useEffect(() => {
+    // Pre-warm the verifier (background initialization)
+    getVerifier();
+
     // Cleanup verifier when component unmounts
     return () => resetVerifier();
   }, []);
@@ -118,19 +123,14 @@ export default function Login() {
         console.log(`[DEBUG] ${isTestNum ? '🧪 Test number detected' : '📱 Real number detected'} - Initiating OTP send`);
       }
 
-      // For production mode, ensure we have a fresh verifier
+      // For production mode, use the pre-warmed verifier (already initialized in useEffect)
       let verifier = null;
       if (!isTestNum) {
-        // Reset and recreate verifier for production mode to ensure clean state
-        resetVerifier();
-        verifier = getVerifier();
+        verifier = getVerifier(); // Use existing pre-warmed verifier (instant!)
 
         if (import.meta.env.DEV) {
-          console.log('[DEBUG] Using fresh RecaptchaVerifier for production mode');
+          console.log('[DEBUG] Using pre-warmed RecaptchaVerifier (no delay)');
         }
-
-        // Wait for verifier to fully render before proceeding
-        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       const result = await signInWithPhoneNumber(auth, fullPhone, verifier);
@@ -160,11 +160,19 @@ export default function Login() {
       }
       setError(errorMsg);
 
-      // Always reset verifier on error for production mode to allow fresh retry
-      // Exception: INVALID_RECAPTCHA_TOKEN might need the existing verifier to show visible CAPTCHA
-      if (!auth.settings.appVerificationDisabledForTesting &&
-          !(err.message && err.message.includes('INVALID_RECAPTCHA_TOKEN'))) {
+      // Only reset verifier on specific errors that indicate verifier corruption
+      // For most errors (wrong phone, rate limit, etc.), keep the pre-warmed verifier
+      const verifierCorrupted = err.code === 'auth/captcha-check-failed' ||
+                                 err.code === 'auth/internal-error' ||
+                                 (err.message && err.message.includes('internal-error'));
+
+      if (verifierCorrupted && !auth.settings.appVerificationDisabledForTesting) {
+        if (import.meta.env.DEV) {
+          console.log('[DEBUG] Resetting verifier due to corruption');
+        }
         resetVerifier();
+        // Pre-warm again for next attempt
+        setTimeout(() => getVerifier(), 100);
       }
     } finally {
       setLoading(false);
@@ -202,10 +210,10 @@ export default function Login() {
     // accent colours updated to #f06022, brand-light tint updated.
     <div className="min-h-screen bg-gradient-to-b from-brand-dark to-brand-mid flex flex-col items-center justify-center p-6">
 
-      {/* Logo — same position/size as original, emoji replaced by real brand icon */}
+      {/* Logo — icon only (no text), larger and prominent */}
       <div className="text-center mb-8">
         <img
-          src="/icons/icon-192.png"
+          src="/icons/logo.png"
           alt="NatBolt"
           className="w-20 h-20 rounded-3xl mx-auto mb-4 shadow-xl"
         />
@@ -295,6 +303,29 @@ export default function Login() {
 
       {/* reCAPTCHA container - invisible, no UI shown */}
       <div id="recaptcha-container" />
+
+      {/* reCAPTCHA disclosure (required by Google when badge is hidden) */}
+      <p className="text-white text-xs mt-6 text-center opacity-70">
+        Protected by reCAPTCHA. Google{' '}
+        <a
+          href="https://policies.google.com/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-100"
+        >
+          Privacy Policy
+        </a>
+        {' '}and{' '}
+        <a
+          href="https://policies.google.com/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-100"
+        >
+          Terms of Service
+        </a>
+        {' '}apply.
+      </p>
     </div>
   );
 }

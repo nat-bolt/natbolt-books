@@ -210,7 +210,7 @@ export default function EstimateDetail() {
       `Your estimate *${bill.estimateNumber}* from *${shop.shopName}* is ready.\n` +
       `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')}\n` +
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
-      `Thank you! 🙏\n\nPowered by NatBolt Book`;
+      `Thank you! 🙏\n\nPowered by NatBolt Billu`;
     const waUrl = phone
       ? `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`;

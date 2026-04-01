@@ -9,7 +9,7 @@ import useStore from './store/useStore';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
-import Login            from './pages/Login';
+import Login            from './pages/Login';  // ← Firebase Phone Auth (reverted from MSG91)
 import Pending          from './pages/Pending';
 import AdminPanel       from './pages/AdminPanel';
 import Dashboard        from './pages/Dashboard';
@@ -26,20 +26,18 @@ export default function App() {
   const { setUser, setShop, setIsAdmin, setAuthLoading } = useStore();
 
   useEffect(() => {
-    let isMounted = true; // Track mount status to prevent state updates after unmount
+    let isMounted = true;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        if (!isMounted) return; // Component unmounted, abort
+        if (!isMounted) return;
         setUser(firebaseUser);
 
         try {
           // ── Single RPC resolves admin + shop in one round trip ───────────────
-          // Replaces the previous two sequential calls (is_admin → shop SELECT).
-          // Returns: { is_admin: bool, shop: { ...all columns } | null }
           const { data: ctx, error: ctxErr } = await supabase.rpc('get_user_context');
 
-          if (!isMounted) return; // Component unmounted during async call, abort
+          if (!isMounted) return;
 
           if (ctxErr) {
             console.error('get_user_context error:', ctxErr.message);
@@ -50,7 +48,6 @@ export default function App() {
             if (ctx?.shop) {
               setShop(mapShop(ctx.shop));
             }
-            // ctx.shop === null → no shop yet → ProtectedRoute sends to /setup or /pending
           }
         } catch (err) {
           if (isMounted) {
@@ -58,7 +55,7 @@ export default function App() {
           }
         }
       } else {
-        // Signed out — reset everything
+        // Signed out
         if (!isMounted) return;
         setUser(null);
         setShop(null);
@@ -70,7 +67,7 @@ export default function App() {
     });
 
     return () => {
-      isMounted = false; // Mark as unmounted
+      isMounted = false;
       unsubscribe();
     };
   }, []);

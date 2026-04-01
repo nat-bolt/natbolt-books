@@ -1,9 +1,9 @@
-// NatBolt Book — Service Worker
+// NatBolt Billu — Service Worker
 // Purpose: satisfy Chrome's PWA installability requirements so Android creates
 // a proper WebAPK (full-screen, no URL bar) instead of a browser shortcut.
 // Strategy: network-first with no aggressive caching — keeps auth flows clean.
 
-const CACHE_NAME = 'natbolt-v1';
+const CACHE_NAME = 'natbolt-v3';
 
 // Static shell assets to pre-cache (app loads these on every visit anyway)
 const PRECACHE_URLS = [

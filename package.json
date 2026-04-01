@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons:add-text": "node scripts/add-text-to-icons.js",
+    "icons:restore": "cp public/icons/backup/*.png public/icons/",
+    "icons:resize": "node scripts/resize-icons.js",
+    "icons:favicon": "node scripts/create-favicon.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
@@ -29,6 +33,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.24",
+    "canvas": "^3.2.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

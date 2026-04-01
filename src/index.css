@@ -56,3 +56,12 @@
     @apply text-xs font-bold text-brand-mid uppercase tracking-wide mb-2;
   }
 }
+
+/* ── Hide reCAPTCHA badge ──────────────────────────────────────────────────
+ * Firebase reCAPTCHA adds a global badge that persists across pages.
+ * Hide it globally since we use invisible reCAPTCHA (no user interaction).
+ * Google's terms allow hiding if you include privacy/terms links in your UI.
+ */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}

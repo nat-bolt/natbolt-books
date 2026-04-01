@@ -194,7 +194,7 @@ export default function Settings() {
           {shop?.plan !== 'paid' && (
             <button
               className="text-xs font-bold text-accent border border-accent rounded-lg px-2 py-1"
-              onClick={() => window.open(`https://wa.me/91${shop?.phone || ''}?text=${encodeURIComponent('Hi, I want to upgrade NatBolt Book to Paid Plan for ₹299/month. Shop: ' + shop?.shopName)}`, '_blank')}
+              onClick={() => window.open(`https://wa.me/91${shop?.phone || ''}?text=${encodeURIComponent('Hi, I want to upgrade NatBolt Billu to Paid Plan for ₹299/month. Shop: ' + shop?.shopName)}`, '_blank')}
             >
               Upgrade
             </button>

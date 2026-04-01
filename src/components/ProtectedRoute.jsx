@@ -12,7 +12,7 @@ export default function ProtectedRoute({ children, requireShop = false, requireA
       <div className="min-h-screen flex items-center justify-center bg-brand-light">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-brand-mid border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-brand-dark font-medium">NatBolt Book</p>
+          <p className="text-brand-dark font-medium">NatBolt Billu</p>
         </div>
       </div>
     );

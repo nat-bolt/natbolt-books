@@ -1,10 +1,10 @@
 {
-  "appName": "NatBolt Book",
+  "appName": "NatBolt Billu",
   "appTagline": "दो-पहिया वाहन सर्विस बिलिंग",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {
-    "title": "NatBolt Book में साइन इन करें",
+    "title": "NatBolt Billu में साइन इन करें",
     "subtitle": "दो-पहिया वाहन सर्विस बिलिंग",
     "phoneLabel": "मोबाइल नंबर",
     "phonePlaceholder": "10 अंकों का मोबाइल नंबर",
@@ -172,7 +172,7 @@
     "paidPlan": "पेड प्लान (असीमित)",
     "upgradePlan": "पेड में अपग्रेड करें — ₹299/महीना",
     "logout": "साइन आउट",
-    "logoutConfirm": "NatBolt Book से साइन आउट करें?",
+    "logoutConfirm": "NatBolt Billu से साइन आउट करें?",
     "save": "परिवर्तन सहेजें",
     "saving": "सहेजा जा रहा है...",
     "saved": "परिवर्तन सहेजे गए!"
@@ -267,7 +267,7 @@
     "sgst": "SGST (9%)",
     "grandTotal": "कुल राशि",
     "payVia": "UPI से भुगतान करें",
-    "poweredBy": "NatBolt Book द्वारा संचालित",
+    "poweredBy": "NatBolt Billu द्वारा संचालित",
     "thankYou": "आपके व्यापार के लिए धन्यवाद!"
   }
 }

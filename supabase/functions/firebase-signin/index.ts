@@ -1,5 +1,5 @@
 // =============================================================================
-// NatBolt Book — Supabase Edge Function: firebase-signin
+// NatBolt Billu — Supabase Edge Function: firebase-signin
 //
 // PURPOSE:
 //   Bridges Firebase Phone Auth → Supabase Auth without requiring

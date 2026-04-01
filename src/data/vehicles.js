@@ -1,5 +1,5 @@
 // =============================================================================
-// NatBolt Book — Static vehicle reference data
+// NatBolt Billu — Static vehicle reference data
 //
 // Kept as a JS file (not DB) because:
 //   • Reference data — same for every shop, never changes at runtime

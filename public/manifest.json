@@ -1,6 +1,6 @@
 {
-  "name": "NatBolt Book",
-  "short_name": "NatBolt",
+  "name": "NatBolt Billu",
+  "short_name": "Billu",
   "description": "Two-Wheeler Service Billing App",
   "start_url": "/",
   "display": "standalone",

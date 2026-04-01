@@ -30,7 +30,7 @@ export default function Pending() {
 
       <h1 className="text-2xl font-bold text-white mb-2">Shop Not Registered</h1>
       <p className="text-brand-light text-sm mb-6 max-w-xs">
-        Your number is not yet registered with NatBolt Book.
+        Your number is not yet registered with NatBolt Billu.
         Contact the admin to get your shop set up.
       </p>
 
@@ -40,7 +40,7 @@ export default function Pending() {
       </div>
 
       <a
-        href="https://wa.me/919738007523?text=Hi, please register my shop on NatBolt Book. My number is +91 {{phone}}"
+        href="https://wa.me/919738007523?text=Hi, please register my shop on NatBolt Billu. My number is +91 {{phone}}"
         className="flex items-center gap-2 bg-green-500 text-white font-semibold px-6 py-3 rounded-xl mb-4"
         target="_blank"
         rel="noopener noreferrer"

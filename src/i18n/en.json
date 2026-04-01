@@ -1,10 +1,10 @@
 {
-  "appName": "NatBolt Book",
+  "appName": "NatBolt Billu",
   "appTagline": "Two-Wheeler Service Billing",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {
-    "title": "Sign In to NatBolt Book",
+    "title": "Sign In to NatBolt Billu",
     "subtitle": "Two-Wheeler Service Billing",
     "phoneLabel": "Mobile Number",
     "phonePlaceholder": "10-digit mobile number",
@@ -172,7 +172,7 @@
     "paidPlan": "Paid Plan (Unlimited)",
     "upgradePlan": "Upgrade to Paid — ₹299/month",
     "logout": "Sign Out",
-    "logoutConfirm": "Sign out of NatBolt Book?",
+    "logoutConfirm": "Sign out of NatBolt Billu?",
     "save": "Save Changes",
     "saving": "Saving...",
     "saved": "Changes saved!"
@@ -267,7 +267,7 @@
     "sgst": "SGST (9%)",
     "grandTotal": "GRAND TOTAL",
     "payVia": "Pay via UPI",
-    "poweredBy": "Powered by NatBolt Books",
+    "poweredBy": "Powered by NatBolt Billu",
     "thankYou": "Thank you for your business!"
   }
 }
