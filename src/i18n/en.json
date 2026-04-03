@@ -1,10 +1,9 @@
 {
   "appName": "NatBolt Billu",
-  "appTagline": "Two-Wheeler Service Billing",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {
-    "title": "Sign In to NatBolt Billu",
+    "title": "Let's Get Started",
     "subtitle": "Two-Wheeler Service Billing",
     "phoneLabel": "Mobile Number",
     "phonePlaceholder": "10-digit mobile number",

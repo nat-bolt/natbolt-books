@@ -2,12 +2,13 @@ import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { Save, LogOut, Globe, Crown, QrCode, MapPin, Upload, X, CheckCircle } from 'lucide-react';
+import { Save, LogOut, Globe, Crown, QrCode, MapPin, Upload, X, CheckCircle, Image } from 'lucide-react';
 import { auth } from '../firebase';
 import { supabase } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import i18n from '../i18n/index';
+import { UNIQUE_CITIES } from '../data/cities';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English' },
@@ -20,6 +21,7 @@ export default function Settings() {
   const navigate   = useNavigate();
   const { shop, setShop, setUser, language, setLanguage } = useStore();
   const fileInputRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   const [form, setForm] = useState({
     shopName:  shop?.shopName  || '',
@@ -27,6 +29,7 @@ export default function Settings() {
     gstNumber: shop?.gstNumber || '',
     upiId:     shop?.upiId     || '',
     address:   shop?.address   || '',
+    city:      shop?.city      || '',
     pincode:   shop?.pincode   || '',
     mapsUrl:   shop?.mapsUrl   || '',
   });
@@ -37,6 +40,13 @@ export default function Settings() {
   const [qrUploading, setQrUploading] = useState(false);
   const [qrSaved, setQrSaved]       = useState(false);
   const [qrError, setQrError]       = useState('');
+
+  // Shop photo upload state
+  const [photoFile, setPhotoFile]         = useState(null);
+  const [photoPreview, setPhotoPreview]   = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoSaved, setPhotoSaved]       = useState(false);
+  const [photoError, setPhotoError]       = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
@@ -58,6 +68,7 @@ export default function Settings() {
           gst_number: form.gstNumber.trim() || null,
           upi_id:     form.upiId.trim()     || null,
           address:    form.address.trim()   || null,
+          city:       form.city.trim()      || null,
           pincode:    form.pincode.trim()   || null,
           maps_url:   form.mapsUrl.trim()   || null,
           updated_at: new Date().toISOString(),
@@ -68,6 +79,7 @@ export default function Settings() {
       setShop({
         ...shop,
         ...form,
+        city: form.city.trim() || null,
         pincode: form.pincode.trim() || null,
         mapsUrl: form.mapsUrl.trim() || null,
       });
@@ -160,6 +172,85 @@ export default function Settings() {
     }
   };
 
+  // ── Shop photo file picker ────────────────────────────────────────────────
+  const handlePhotoPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Shop photo must be an image file (PNG/JPG)');
+      return;
+    }
+    setPhotoFile(file);
+    setPhotoError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const clearPhotoPick = () => {
+    setPhotoFile(null);
+    setPhotoPreview('');
+    setPhotoError('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  // ── Shop photo upload to Supabase Storage ─────────────────────────────────
+  const handlePhotoUpload = async () => {
+    if (!photoFile || !shop?.id) return;
+    setPhotoUploading(true);
+    setPhotoError('');
+    try {
+      const ext  = photoFile.name.split('.').pop().toLowerCase() || 'png';
+      const path = `${shop.id}/photo.${ext}`;
+
+      const { data: uploadData, error: upErr } = await supabase.storage
+        .from('shop-assets')
+        .upload(path, photoFile, { upsert: true, contentType: photoFile.type });
+
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('shop-assets')
+        .getPublicUrl(uploadData.path);
+
+      // Update shop row
+      const { error: updateErr } = await supabase
+        .from('shops')
+        .update({ shop_photo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', shop.id);
+
+      if (updateErr) throw updateErr;
+
+      // Update store so it's available immediately
+      setShop({ ...shop, shopPhotoUrl: publicUrl });
+      setPhotoFile(null);
+      setPhotoPreview('');
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      setPhotoSaved(true);
+      setTimeout(() => setPhotoSaved(false), 2500);
+    } catch (err) {
+      console.error('Shop photo upload error:', err);
+      setPhotoError(err.message || 'Upload failed');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  // ── Remove shop photo ─────────────────────────────────────────────────────
+  const handlePhotoRemove = async () => {
+    if (!shop?.shopPhotoUrl) return;
+    if (!confirm('Remove your shop photo?')) return;
+    try {
+      await supabase
+        .from('shops')
+        .update({ shop_photo_url: null, updated_at: new Date().toISOString() })
+        .eq('id', shop.id);
+      setShop({ ...shop, shopPhotoUrl: null });
+    } catch (err) {
+      console.error('Shop photo remove error:', err);
+    }
+  };
+
   const handleLangChange = (code) => {
     setLanguage(code);
     i18n.changeLanguage(code);
@@ -245,10 +336,29 @@ export default function Settings() {
             <textarea className="input-field" rows={2} value={form.address} onChange={set('address')} />
           </div>
 
+          {/* City */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              City <span className="text-gray-400">(for shop code & analytics)</span>
+            </label>
+            <select
+              className="input-field"
+              value={form.city}
+              onChange={set('city')}
+            >
+              <option value="">Select your city</option>
+              {UNIQUE_CITIES.map((city) => (
+                <option key={city.name + city.code} value={city.name}>
+                  {city.name} ({city.state})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Pincode */}
           <div>
             <label className="text-xs text-gray-500 mb-1 block">
-              Pincode <span className="text-gray-400">(for regional analytics)</span>
+              Pincode <span className="text-gray-400">(for shop code & analytics)</span>
             </label>
             <input
               className="input-field"
@@ -293,6 +403,94 @@ export default function Settings() {
             )}
             {saved ? t('settings.saved') : saving ? t('settings.saving') : t('settings.save')}
           </button>
+        </div>
+
+        {/* ── Shop Photo ── */}
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <Image className="w-4 h-4 text-brand-mid" />
+            <p className="section-label mb-0">Shop Photo</p>
+          </div>
+          <p className="text-xs text-gray-500 -mt-1">
+            Upload your shop photo. It will appear on bill PDFs.
+          </p>
+
+          {/* Current / new photo preview */}
+          {(photoPreview || shop?.shopPhotoUrl) ? (
+            <div className="flex items-start gap-4">
+              <div className="relative">
+                <img
+                  src={photoPreview || shop?.shopPhotoUrl}
+                  alt="Shop Photo"
+                  className="w-28 h-28 object-cover rounded-xl border border-gray-200 bg-white"
+                />
+                {photoPreview && (
+                  /* New file selected — show clear button */
+                  <button
+                    onClick={clearPhotoPick}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 text-white rounded-full flex items-center justify-center shadow"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                {photoPreview ? (
+                  <>
+                    <p className="text-xs text-gray-500">{photoFile?.name}</p>
+                    <button
+                      className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
+                      onClick={handlePhotoUpload}
+                      disabled={photoUploading}
+                    >
+                      {photoUploading
+                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        : photoSaved
+                        ? <CheckCircle className="w-4 h-4" />
+                        : <Upload className="w-4 h-4" />}
+                      {photoUploading ? 'Uploading...' : photoSaved ? 'Saved!' : 'Save Photo'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-green-600 font-semibold">✓ Shop photo set</p>
+                    <button
+                      className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      Replace photo
+                    </button>
+                    <button
+                      className="w-full text-xs text-red-400 font-medium py-1"
+                      onClick={handlePhotoRemove}
+                    >
+                      Remove photo
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* No photo yet */
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-gray-50"
+            >
+              <Upload className="w-6 h-6" />
+              <span className="text-sm font-medium">Tap to upload shop photo</span>
+              <span className="text-xs">PNG or JPG — appears on bill PDFs</span>
+            </button>
+          )}
+
+          {photoError && <p className="text-red-500 text-sm">{photoError}</p>}
+
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg"
+            className="hidden"
+            onChange={handlePhotoPick}
+          />
         </div>
 
         {/* ── Payment QR Code ── */}

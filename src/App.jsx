@@ -46,7 +46,15 @@ export default function App() {
           } else {
             setIsAdmin(false);
             if (ctx?.shop) {
-              setShop(mapShop(ctx.shop));
+              const mappedShop = mapShop(ctx.shop);
+              // Check if shop is deactivated (soft deleted)
+              if (mappedShop.deletedAt) {
+                // Shop is deactivated - treat as no shop (will redirect to Pending)
+                setShop(null);
+                console.warn('[App] Shop is deactivated:', mappedShop.shopName);
+              } else {
+                setShop(mappedShop);
+              }
             }
           }
         } catch (err) {

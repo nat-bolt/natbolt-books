@@ -1,6 +1,5 @@
 {
   "appName": "NatBolt Billu",
-  "appTagline": "दो-पहिया वाहन सर्विस बिलिंग",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {

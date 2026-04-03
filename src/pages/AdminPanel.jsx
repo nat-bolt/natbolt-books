@@ -4,12 +4,13 @@ import { signOut } from 'firebase/auth';
 import {
   Plus, Store, Crown, RefreshCw, LogOut, ChevronRight, X,
   BarChart2, MapPin, Package, TrendingUp, ChevronDown, ChevronUp,
-  ExternalLink, QrCode, Upload,
+  ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { supabase, mapShop } from '../supabase';
 import useStore from '../store/useStore';
 import { FREE_BILL_LIMIT } from '../config';
+import { UNIQUE_CITIES } from '../data/cities';
 
 const FREE_LIMIT = FREE_BILL_LIMIT;
 
@@ -29,6 +30,7 @@ function isSafeUrl(url) {
 // ── Create / Edit Shop Modal ──────────────────────────────────────────────────
 function ShopFormModal({ existing, onSave, onClose }) {
   const fileInputRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   const [form, setForm] = useState({
     shopName:  existing?.shopName  || '',
@@ -37,6 +39,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
     gstNumber: existing?.gstNumber || '',
     upiId:     existing?.upiId     || '',
     address:   existing?.address   || '',
+    city:      existing?.city      || '',
     pincode:   existing?.pincode   || '',
     mapsUrl:   existing?.mapsUrl   || '',
     plan:      existing?.plan      || 'free',
@@ -46,6 +49,11 @@ function ShopFormModal({ existing, onSave, onClose }) {
   const [qrFile, setQrFile]       = useState(null);
   const [qrPreview, setQrPreview] = useState('');
   const [qrError, setQrError]     = useState('');
+
+  // Shop photo state
+  const [photoFile, setPhotoFile]       = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [photoError, setPhotoError]     = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -88,6 +96,42 @@ function ShopFormModal({ existing, onSave, onClose }) {
     return publicUrl;
   };
 
+  const handlePhotoPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setPhotoError('Must be PNG or JPG'); return; }
+    setPhotoFile(file);
+    setPhotoError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const clearPhotoPick = () => {
+    setPhotoFile(null);
+    setPhotoPreview('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  // Upload shop photo to storage, returns public URL or null
+  const uploadPhoto = async (shopId) => {
+    if (!photoFile) return null;
+    const ext  = photoFile.name.split('.').pop().toLowerCase() || 'png';
+    const path = `${shopId}/photo.${ext}`;
+
+    const { data: uploadData, error: upErr } = await supabase.storage
+      .from('shop-assets')
+      .upload(path, photoFile, { upsert: true, contentType: photoFile.type });
+
+    if (upErr) throw new Error(`Photo upload failed: ${upErr.message}`);
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('shop-assets')
+      .getPublicUrl(uploadData.path);
+
+    return publicUrl;
+  };
+
   const handleSave = async () => {
     if (!form.shopName.trim()) { setError('Shop name is required'); return; }
     if (!form.phone.trim())    { setError('Phone number is required'); return; }
@@ -104,30 +148,37 @@ function ShopFormModal({ existing, onSave, onClose }) {
     try {
       if (existing) {
         // ── Edit existing shop ──────────────────────────────────────────────
-        // Upload QR first if a new file was selected
+        // Upload files first if new files were selected
         let qrCodeUrl = existing.qrCodeUrl || null;
+        let shopPhotoUrl = existing.shopPhotoUrl || null;
+
         if (qrFile) {
           qrCodeUrl = await uploadQr(existing.id);
+        }
+        if (photoFile) {
+          shopPhotoUrl = await uploadPhoto(existing.id);
         }
 
         const { error: err } = await supabase
           .from('shops')
           .update({
-            shop_name:   form.shopName.trim(),
-            owner_name:  form.ownerName.trim() || null,
-            gst_number:  form.gstNumber.trim() || null,
-            upi_id:      form.upiId.trim()     || null,
-            address:     form.address.trim()   || null,
-            pincode:     form.pincode.trim()   || null,
-            maps_url:    form.mapsUrl.trim()   || null,
-            qr_code_url: qrCodeUrl,
-            plan:        form.plan,
-            updated_at:  new Date().toISOString(),
+            shop_name:      form.shopName.trim(),
+            owner_name:     form.ownerName.trim() || null,
+            gst_number:     form.gstNumber.trim() || null,
+            upi_id:         form.upiId.trim()     || null,
+            address:        form.address.trim()   || null,
+            city:           form.city.trim()      || null,
+            pincode:        form.pincode.trim()   || null,
+            maps_url:       form.mapsUrl.trim()   || null,
+            qr_code_url:    qrCodeUrl,
+            shop_photo_url: shopPhotoUrl,
+            plan:           form.plan,
+            updated_at:     new Date().toISOString(),
           })
           .eq('id', existing.id);
 
         if (err) throw err;
-        onSave({ ...existing, ...form, phone: e164, qrCodeUrl });
+        onSave({ ...existing, ...form, phone: e164, qrCodeUrl, shopPhotoUrl });
 
       } else {
         // ── Create new shop ─────────────────────────────────────────────────
@@ -140,6 +191,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
             gst_number: form.gstNumber.trim() || null,
             upi_id:     form.upiId.trim()     || null,
             address:    form.address.trim()   || null,
+            city:       form.city.trim()      || null,
             pincode:    form.pincode.trim()   || null,
             maps_url:   form.mapsUrl.trim()   || null,
             plan:       form.plan,
@@ -149,19 +201,29 @@ function ShopFormModal({ existing, onSave, onClose }) {
 
         if (err) throw err;
 
-        // Upload QR now that we have the shop ID
+        // Upload files now that we have the shop ID
         let qrCodeUrl = null;
+        let shopPhotoUrl = null;
+
         if (qrFile) {
           qrCodeUrl = await uploadQr(data.id);
-          if (qrCodeUrl) {
-            await supabase
-              .from('shops')
-              .update({ qr_code_url: qrCodeUrl })
-              .eq('id', data.id);
-          }
+        }
+        if (photoFile) {
+          shopPhotoUrl = await uploadPhoto(data.id);
         }
 
-        onSave(mapShop({ ...data, qr_code_url: qrCodeUrl }));
+        // Update shop with file URLs if any were uploaded
+        if (qrCodeUrl || shopPhotoUrl) {
+          await supabase
+            .from('shops')
+            .update({
+              qr_code_url: qrCodeUrl,
+              shop_photo_url: shopPhotoUrl,
+            })
+            .eq('id', data.id);
+        }
+
+        onSave(mapShop({ ...data, qr_code_url: qrCodeUrl, shop_photo_url: shopPhotoUrl }));
       }
       onClose();
     } catch (err) {
@@ -172,8 +234,9 @@ function ShopFormModal({ existing, onSave, onClose }) {
     }
   };
 
-  // Current QR to display (new preview takes priority over stored URL)
+  // Current files to display (new previews take priority over stored URLs)
   const displayQr = qrPreview || existing?.qrCodeUrl || null;
+  const displayPhoto = photoPreview || existing?.shopPhotoUrl || null;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end z-50" onClick={onClose}>
@@ -239,10 +302,29 @@ function ShopFormModal({ existing, onSave, onClose }) {
               value={form.address} onChange={setField('address')} />
           </div>
 
+          {/* City */}
+          <div>
+            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
+              City <span className="text-gray-400 font-normal">(shop code & analytics)</span>
+            </label>
+            <select
+              className="input-field"
+              value={form.city}
+              onChange={setField('city')}
+            >
+              <option value="">Select city</option>
+              {UNIQUE_CITIES.map((city) => (
+                <option key={city.name + city.code} value={city.name}>
+                  {city.name} ({city.state})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Pincode */}
           <div>
             <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Pincode <span className="text-gray-400 font-normal">(analytics)</span>
+              Pincode <span className="text-gray-400 font-normal">(shop code & analytics)</span>
             </label>
             <input className="input-field" placeholder="e.g. 500032"
               maxLength={10} inputMode="numeric"
@@ -256,6 +338,58 @@ function ShopFormModal({ existing, onSave, onClose }) {
             </label>
             <input className="input-field" placeholder="Paste Google Maps share link"
               value={form.mapsUrl} onChange={setField('mapsUrl')} />
+          </div>
+
+          {/* Shop Photo */}
+          <div>
+            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 flex items-center gap-1.5">
+              <Image className="w-3.5 h-3.5" />
+              Shop Photo <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+
+            {displayPhoto ? (
+              <div className="flex items-center gap-3">
+                <img
+                  src={displayPhoto}
+                  alt="Shop"
+                  className="w-20 h-20 object-cover rounded-xl border border-gray-200 bg-white flex-shrink-0"
+                />
+                <div className="flex-1 space-y-1.5">
+                  {photoPreview
+                    ? <p className="text-xs text-amber-600 font-medium">New photo selected — will upload on save</p>
+                    : <p className="text-xs text-green-600 font-medium">✓ Shop photo set</p>
+                  }
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
+                  >
+                    {photoPreview ? 'Choose different image' : 'Replace photo'}
+                  </button>
+                  {photoPreview && (
+                    <button onClick={clearPhotoPick} className="w-full text-xs text-gray-400 py-1">
+                      Clear selection
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex items-center justify-center gap-2 text-gray-400 text-sm"
+              >
+                <Upload className="w-4 h-4" />
+                Upload shop photo (PNG/JPG)
+              </button>
+            )}
+
+            {photoError && <p className="text-red-500 text-xs mt-1">{photoError}</p>}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg"
+              className="hidden"
+              onChange={handlePhotoPick}
+            />
           </div>
 
           {/* Payment QR Code */}
@@ -334,7 +468,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
           disabled={saving}
         >
           {saving
-            ? (qrFile ? 'Uploading QR & Saving...' : 'Saving...')
+            ? (qrFile || photoFile ? 'Uploading files & Saving...' : 'Saving...')
             : existing ? 'Save Changes' : 'Register Shop'}
         </button>
       </div>
@@ -547,6 +681,8 @@ export default function AdminPanel() {
   const { user, isAdmin, authLoading, setUser, setShop, setIsAdmin } = useStore();
 
   const [shops, setShops]     = useState([]);
+  const [deactivatedShops, setDeactivatedShops] = useState([]);
+  const [showDeactivated, setShowDeactivated]   = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null); // null | 'create' | shop object
 
@@ -559,13 +695,23 @@ export default function AdminPanel() {
   const loadShops = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Load all shops first (works whether deleted_at column exists or not)
+      const { data: allShops, error } = await supabase
         .from('shops')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setShops((data || []).map(mapShop));
+
+      const mapped = (allShops || []).map(mapShop);
+
+      // Separate active and deactivated based on deletedAt field
+      // If column doesn't exist, all shops will be active (deletedAt = null)
+      const active = mapped.filter(s => !s.deletedAt);
+      const deactivated = mapped.filter(s => s.deletedAt);
+
+      setShops(active);
+      setDeactivatedShops(deactivated);
     } catch (err) {
       console.error('loadShops error:', err);
     } finally {
@@ -605,6 +751,63 @@ export default function AdminPanel() {
 
     if (!error) {
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, billsThisMonth: 0 } : s));
+    }
+  };
+
+  const deactivateShop = async (shop) => {
+    // Confirmation dialog
+    const shopName = shop.shopName || 'this shop';
+    const confirmMsg = `Deactivate ${shopName}?\n\nThis will:\n• Mark the shop as inactive\n• Prevent shop owner from logging in\n• Hide shop from active list\n• Preserve all data for audit/regulatory purposes\n\nData will be retained for compliance and can be reactivated if needed.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      // Soft delete: mark as inactive with deletion timestamp
+      const { error } = await supabase
+        .from('shops')
+        .update({
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', shop.id);
+
+      if (error) throw error;
+
+      // Reload to refresh both active and deactivated lists
+      loadShops();
+
+      alert(`${shopName} has been deactivated.\n\nAll data is preserved for audit purposes and can be reactivated if needed.`);
+    } catch (err) {
+      console.error('[AdminPanel] deactivate shop error:', err);
+      alert(`Failed to deactivate shop: ${err.message}`);
+    }
+  };
+
+  const reactivateShop = async (shop) => {
+    const shopName = shop.shopName || 'this shop';
+    const confirmMsg = `Reactivate ${shopName}?\n\nThis will:\n• Restore shop to active status\n• Allow shop owner to log in again\n• Show shop in active list`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      // Clear deleted_at timestamp to reactivate
+      const { error } = await supabase
+        .from('shops')
+        .update({
+          deleted_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', shop.id);
+
+      if (error) throw error;
+
+      // Reload to refresh both active and deactivated lists
+      loadShops();
+
+      alert(`${shopName} has been reactivated successfully.`);
+    } catch (err) {
+      console.error('[AdminPanel] reactivate shop error:', err);
+      alert(`Failed to reactivate shop: ${err.message}`);
     }
   };
 
@@ -650,7 +853,7 @@ export default function AdminPanel() {
         </button>
       </header>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-40 space-y-4">
 
         {/* ── Stats grid (4 cards) ── */}
         <div className="grid grid-cols-2 gap-3">
@@ -785,12 +988,77 @@ export default function AdminPanel() {
                         Reset Bill Count
                       </button>
                     )}
+                    <button
+                      className="p-2 rounded-xl text-red-500 bg-red-50 border border-red-200 flex-shrink-0"
+                      onClick={() => deactivateShop(shop)}
+                      title="Deactivate shop"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* ── Deactivated Shops (collapsible) ── */}
+        {deactivatedShops.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+            <button
+              onClick={() => setShowDeactivated(!showDeactivated)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-gray-500" />
+                <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                  Deactivated Shops ({deactivatedShops.length})
+                </p>
+              </div>
+              {showDeactivated ? (
+                <ChevronUp className="w-4 h-4 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              )}
+            </button>
+
+            {showDeactivated && (
+              <div className="px-4 pb-4 space-y-2">
+                {deactivatedShops.map((shop) => (
+                  <div key={shop.id} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-gray-700 truncate">{shop.shopName}</p>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-red-100 text-red-600 flex-shrink-0">
+                            Deactivated
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500">{shop.ownerName}</p>
+                        <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Deactivated: {new Date(shop.deletedAt).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full mt-3 py-2 rounded-xl text-xs font-bold bg-green-50 text-green-600 border border-green-200 flex items-center justify-center gap-1.5"
+                      onClick={() => reactivateShop(shop)}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reactivate Shop
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Shop create/edit modal */}

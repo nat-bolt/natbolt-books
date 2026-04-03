@@ -86,6 +86,32 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   doc.setFillColor(...BRAND_DARK);
   doc.rect(0, 0, W, 28, 'F');
 
+  // Shop photo (top-right corner if available)
+  let shopPhotoWidth = 0;
+  if (shop?.shopPhotoUrl) {
+    try {
+      const res = await fetch(shop.shopPhotoUrl);
+      if (res.ok) {
+        const blob    = await res.blob();
+        const imgData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const mime    = blob.type || '';
+        const imgType = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
+        const photoSize = 24; // 24mm square
+        doc.addImage(imgData, imgType, W - M - photoSize, 2, photoSize, photoSize);
+        shopPhotoWidth = photoSize + 3; // reserve space for photo + gap
+      }
+    } catch (err) {
+      console.warn('[NatBolt PDF] Shop photo load failed:', err.message);
+    }
+  }
+
+  // Shop text (left side, adjusted if photo exists)
+  const textMaxWidth = W - 2 * M - shopPhotoWidth;
   doc.setTextColor(...WHITE);
   doc.setFont(F, 'bold');
   doc.setFontSize(15);
@@ -97,7 +123,8 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     doc.text(`GST: ${shop.gstNumber}`, M, 16);
   }
   if (shop?.address) {
-    doc.text(shop.address.substring(0, 55), M, 21);
+    const maxChars = Math.floor(textMaxWidth / 1.5); // rough character limit
+    doc.text(shop.address.substring(0, maxChars), M, 21);
   }
   doc.text(`Ph: ${shop?.phone || ''}`, M, 26);
 
@@ -137,13 +164,13 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     doc.setFont(F, 'bold');
     doc.text(`${label}:`, M + 2, y + i * 6);
     doc.setFont(F, 'normal');
-    doc.text(String(val), M + 22, y + i * 6);
+    doc.text(String(val), M + 16, y + i * 6);
   });
   metaRight.forEach(([label, val], i) => {
     doc.setFont(F, 'bold');
     doc.text(`${label}:`, W / 2 + 2, y + i * 6);
     doc.setFont(F, 'normal');
-    doc.text(String(val).substring(0, 20), W / 2 + 20, y + i * 6);
+    doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
   });
 
   y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
