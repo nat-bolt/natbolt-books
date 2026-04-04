@@ -468,7 +468,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
           disabled={saving}
         >
           {saving
-            ? (qrFile || photoFile ? 'Uploading files & Saving...' : 'Saving...')
+            ? (qrFile || photoFile ? 'Saving files...' : 'Saving...')
             : existing ? 'Save Changes' : 'Register Shop'}
         </button>
       </div>

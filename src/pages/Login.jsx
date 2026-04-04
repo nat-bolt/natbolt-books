@@ -220,6 +220,7 @@ export default function Login() {
         <h1 className="text-3xl font-bold text-white tracking-wide" style={{ fontFamily: 'Dagger Square, sans-serif' }}>
           NatBolt Billu
         </h1>
+        <p className="text-brand-light text-sm mt-2 opacity-80">{t('appTagline')}</p>
       </div>
 
       {/* Card — same max-w-sm centered white card, no structural change */}
@@ -266,7 +267,7 @@ export default function Login() {
             </div>
 
             <p className="text-sm text-gray-500 mb-4">
-              {t('login.otpSent')} +91{phone}
+              {t('login.otpSent')} +91 {phone}
             </p>
 
             <label className="section-label">{t('login.otpLabel')}</label>

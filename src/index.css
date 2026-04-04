@@ -24,6 +24,18 @@
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }
+  /* ── Eliminate 300 ms PWA tap delay ────────────────────────────────────────
+   * Without this, mobile browsers wait 300 ms after every tap to check for
+   * a double-tap-to-zoom gesture. In PWA mode this makes buttons feel broken.
+   * touch-action: manipulation opts out of that wait on all interactive elements.
+   *
+   * NOTE: Do NOT include .card or layout containers here — those are scroll
+   * surfaces, not tap targets. Adding manipulation to them interferes with
+   * scroll gesture routing on Android WebView.
+   */
+  button, a, [role="button"], label, select {
+    touch-action: manipulation;
+  }
 }
 
 @layer components {
@@ -50,11 +62,25 @@
            bg-white disabled:bg-gray-100 placeholder-gray-400;
   }
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4;
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4 transition-colors;
   }
   .section-label {
     @apply text-xs font-bold text-brand-mid uppercase tracking-wide mb-2;
   }
+}
+
+/* ── Language-change toast fade animation ─────────────────────────────────
+ * Used by the toast pill in Layout.jsx that appears briefly after switching
+ * language via the header toggle.
+ */
+@keyframes fade-in-out {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+.animate-fade-in-out {
+  animation: fade-in-out 2s ease forwards;
 }
 
 /* ── Hide reCAPTCHA badge ──────────────────────────────────────────────────

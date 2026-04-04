@@ -1,5 +1,6 @@
 {
   "appName": "NatBolt Billu",
+  "appTagline": "Instant bills. Happy customers.",
   "lang": { "en": "English", "hi": "हिंदी", "te": "తెలుగు" },
 
   "login": {
@@ -14,7 +15,7 @@
     "verifyOtp": "Verify & Sign In",
     "verifying": "Verifying...",
     "resendOtp": "Resend OTP",
-    "otpSent": "OTP sent to +91",
+    "otpSent": "OTP sent to",
     "invalidPhone": "Enter a valid 10-digit mobile number",
     "invalidOtp": "Enter the 6-digit OTP"
   },
@@ -43,12 +44,21 @@
     "bills": "Bills",
     "estimates": "Estimates",
     "revenue": "Revenue",
+    "monthRevenue": "Month Revenue",
+    "newBill": "New Bill",
     "newEstimate": "New Estimate",
+    "exportCsv": "Export CSV",
+    "customers": "Customers",
+    "income": "Income",
     "recentActivity": "Recent Activity",
-    "noBills": "No bills yet. Create your first estimate!",
+    "noBills": "No bills yet — tap 'New Bill' or 'New Estimate' to create your first one.",
     "freePlanBanner": "{{used}} of 30 free bills used this month",
-    "upgradeNow": "Upgrade Now",
-    "limitReached": "Monthly limit reached. Upgrade to continue billing."
+    "upgradeNow": "Unlock Unlimited",
+    "limitReached": "You've used all 30 free bills this month. Upgrade to keep billing without limits.",
+    "upgradeFeatureTitle": "Upgrade to unlock this",
+    "upgradeFeatureBody": "Get unlimited bills, income reports, and CSV export. No monthly limits.",
+    "upgradeFeatureCta": "Unlock unlimited billing — ₹299/month",
+    "maybeLater": "Maybe later"
   },
 
   "estimate": {
@@ -135,7 +145,7 @@
     "new": "New Customer",
     "saveCustomer": "Save Customer",
     "history": "Service History",
-    "noHistory": "No service history yet",
+    "noHistory": "No visits recorded yet.",
     "totalBills": "Total Bills",
     "totalSpent": "Total Spent"
   },
@@ -167,9 +177,30 @@
     "language": "Language",
     "plan": "Plan & Billing",
     "currentPlan": "Current Plan",
-    "freePlan": "Free Plan (30 bills/month)",
-    "paidPlan": "Paid Plan (Unlimited)",
-    "upgradePlan": "Upgrade to Paid — ₹299/month",
+    "freePlan": "Free Plan — 30 bills/month",
+    "paidPlan": "Paid Plan — Unlimited billing",
+    "upgradePlan": "Unlock unlimited billing — ₹299/month",
+    "billsUsedThisMonth": "{{used}} / 30 bills used this month",
+    "unlockBtn": "Unlock",
+    "signedInAs": "Signed in as",
+    "shopPhoto": "Shop Photo",
+    "shopPhotoDesc": "Upload your shop photo. It will appear on bill PDFs.",
+    "shopPhotoSet": "✓ Shop photo set",
+    "replacePhoto": "Replace photo",
+    "removePhoto": "Remove photo",
+    "uploadPhotoBtn": "Tap to upload shop photo",
+    "uploadPhotoHint": "PNG or JPG — appears on bill PDFs",
+    "savePhoto": "Save Photo",
+    "paymentQr": "Payment QR Code",
+    "paymentQrDesc": "Your own verified QR image appears on every bill PDF. Customers scan it to pay.",
+    "qrSet": "✓ QR code set",
+    "replaceQr": "Replace QR image",
+    "removeQr": "Remove QR code",
+    "uploadQrBtn": "Tap to upload QR image",
+    "uploadQrHint": "PNG or JPG — appears on every bill PDF",
+    "saveQr": "Save QR Code",
+    "uploading": "Uploading...",
+    "savedShort": "Saved!",
     "logout": "Sign Out",
     "logoutConfirm": "Sign out of NatBolt Billu?",
     "save": "Save Changes",
@@ -184,7 +215,7 @@
     "estimates": "Estimates",
     "totalSpent": "Total Spent",
     "history": "All Transactions",
-    "noHistory": "No transactions yet"
+    "noHistory": "No transactions yet for this customer."
   },
 
   "catalogue": {
@@ -197,15 +228,15 @@
     "price": "Price (₹)",
     "category": "Category",
     "save": "Save Part",
-    "noParts": "No parts in catalogue",
+    "noParts": "Your catalogue is empty. Add parts to speed up estimate creation.",
     "resetDefaults": "Reset to Defaults",
     "saved": "Part saved!"
   },
 
   "income": {
     "title": "Income Dashboard",
-    "paidFeature": "Paid Feature",
-    "upgradePrompt": "Upgrade to Paid plan to unlock Income Dashboard",
+    "paidFeature": "Upgrade to unlock this",
+    "upgradePrompt": "Get unlimited bills, income reports, and CSV export. No monthly limits.",
     "today": "Today",
     "thisWeek": "This Week",
     "thisMonth": "This Month",

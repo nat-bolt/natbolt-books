@@ -18,7 +18,7 @@ function UpgradeModal({ feature, onClose, onUpgrade }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
       <div
-        className="relative bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 pb-10 text-center"
+        className="relative bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 pb-10 text-center max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button className="absolute top-4 right-4 text-gray-400 p-1" onClick={onClose}>
@@ -27,22 +27,22 @@ function UpgradeModal({ feature, onClose, onUpgrade }) {
         <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Lock className="w-8 h-8 text-amber-600" />
         </div>
-        <h2 className="text-lg font-bold text-brand-dark mb-1">Paid Feature 👑</h2>
+        <h2 className="text-lg font-bold text-brand-dark mb-1">{t('dashboard.upgradeFeatureTitle')}</h2>
         <p className="text-sm text-gray-500 mb-2">
           <span className="font-semibold text-brand-mid">{feature}</span> is available on the Paid plan.
         </p>
         <p className="text-xs text-gray-400 mb-6">
-          Upgrade to unlock unlimited estimates, CSV export, income reports, and more.
+          {t('dashboard.upgradeFeatureBody')}
         </p>
         <button
           className="btn-accent w-full flex items-center justify-center gap-2 py-3"
           onClick={onUpgrade}
         >
           <Crown className="w-4 h-4" />
-          Upgrade to Paid — ₹299/month
+          {t('dashboard.upgradeFeatureCta')}
         </button>
         <button className="mt-3 text-sm text-gray-400 w-full py-2" onClick={onClose}>
-          Maybe later
+          {t('dashboard.maybeLater')}
         </button>
       </div>
     </div>
@@ -175,60 +175,71 @@ export default function Dashboard() {
           </div>
           <div className="card text-center">
             <p className="text-lg font-bold text-green-600">{fmtCurrency(stats.revenue)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.revenue')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.monthRevenue')}</p>
           </div>
         </div>
 
-        {/* New Estimate (Paid) + New Bill (Free) */}
+        {/* New Bill (primary) + New Estimate (paid / secondary for free users) */}
         <div className="flex gap-3">
-          <button
-            className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold relative"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal('New Estimate'); return; }
-              navigate('/estimate/new');
-            }}
-            disabled={isAtLimit && shop?.plan === 'paid'}
-          >
-            {shop?.plan !== 'paid' && <Lock className="w-3.5 h-3.5 absolute top-2 right-2 opacity-70" />}
-            <FileText className="w-5 h-5" />
-            {t('dashboard.newEstimate')}
-          </button>
+          {/* New Bill — primary CTA, always accessible on free plan */}
           <button
             className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold"
             onClick={() => navigate('/estimate/new?mode=bill')}
             disabled={isAtLimit}
           >
             <Receipt className="w-5 h-5" />
-            New Bill
+            {t('dashboard.newBill')}
           </button>
+
+          {/* New Estimate — full accent for paid; outlined/secondary for free to signal locked */}
+          {shop?.plan === 'paid' ? (
+            <button
+              className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold"
+              onClick={() => navigate('/estimate/new')}
+              disabled={isAtLimit}
+            >
+              <FileText className="w-5 h-5" />
+              {t('dashboard.newEstimate')}
+            </button>
+          ) : (
+            <button
+              className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
+                         border-2 border-dashed border-brand-mid text-brand-mid bg-brand-light relative"
+              onClick={() => setUpgradeModal(t('dashboard.newEstimate'))}
+            >
+              <Lock className="w-3.5 h-3.5 absolute top-2 right-2 opacity-60" />
+              <FileText className="w-5 h-5" />
+              {t('dashboard.newEstimate')}
+            </button>
+          )}
         </div>
 
         {/* Quick action row */}
         <div className="grid grid-cols-3 gap-3">
           <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-gray-50"
+            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light"
             onClick={() => navigate('/customers')}
           >
             <Users className="w-5 h-5 text-brand-mid" />
-            <span className="text-xs font-semibold text-brand-dark">{t('customer.title')}</span>
+            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.customers')}</span>
           </button>
           <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-gray-50"
+            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light"
             onClick={() => navigate('/income')}
           >
             <TrendingUp className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-green-600' : 'text-gray-400'}`} />
-            <span className="text-xs font-semibold text-brand-dark">{t('income.title')}</span>
+            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.income')}</span>
           </button>
           <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-gray-50 relative"
+            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
             onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal('Export CSV'); return; }
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.exportCsv')); return; }
               exportBillsCSV(bills, shop);
             }}
           >
             {shop?.plan !== 'paid' && <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />}
             <Download className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-brand-mid' : 'text-gray-400'}`} />
-            <span className="text-xs font-semibold text-brand-dark">Export CSV</span>
+            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.exportCsv')}</span>
           </button>
         </div>
 

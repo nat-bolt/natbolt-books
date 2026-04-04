@@ -16,6 +16,37 @@ const LANGUAGES = [
   { code: 'te', label: 'Telugu',  native: 'తెలుగు'  },
 ];
 
+// ── Reusable confirmation modal ───────────────────────────────────────────────
+function ConfirmModal({ title, body, confirmLabel, cancelLabel = 'Keep it', onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onCancel}>
+      <div
+        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drag indicator — signals the sheet is scrollable if content overflows */}
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+        <h3 className="text-base font-bold text-brand-dark mb-2">{title}</h3>
+        <p className="text-sm text-gray-500 mb-6">{body}</p>
+        <div className="flex gap-3">
+          <button
+            className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600"
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-semibold"
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { t }      = useTranslation();
   const navigate   = useNavigate();
@@ -52,7 +83,22 @@ export default function Settings() {
   const [saved,  setSaved]  = useState(false);
   const [error,  setError]  = useState('');
 
+  // ── Confirm dialog state ──────────────────────────────────────────────────
+  const [confirmDialog, setConfirmDialog] = useState(null); // null | 'removeQr' | 'removePhoto'
+
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  // ── Friendly error mapper ─────────────────────────────────────────────────
+  const friendlyError = (err) => {
+    const msg = err?.message || '';
+    if (!navigator.onLine || msg.includes('Failed to fetch') || msg.includes('NetworkError'))
+      return "Couldn't save — check your connection and try again.";
+    if (msg.includes('duplicate') || msg.includes('unique'))
+      return 'This information is already registered.';
+    if (msg.includes('JWT') || msg.includes('session') || msg.includes('auth'))
+      return 'Your session expired. Please sign in again.';
+    return 'Something went wrong. Please try again.';
+  };
 
   // ── Shop details save ─────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -87,7 +133,7 @@ export default function Settings() {
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       console.error('Settings save error:', err);
-      setError(err.message || 'Failed to save');
+      setError(friendlyError(err));
     } finally {
       setSaving(false);
     }
@@ -151,16 +197,20 @@ export default function Settings() {
       setTimeout(() => setQrSaved(false), 2500);
     } catch (err) {
       console.error('QR upload error:', err);
-      setQrError(err.message || 'Upload failed');
+      setQrError(friendlyError(err));
     } finally {
       setQrUploading(false);
     }
   };
 
   // ── Remove QR ─────────────────────────────────────────────────────────────
-  const handleQrRemove = async () => {
+  const handleQrRemove = () => {
     if (!shop?.qrCodeUrl) return;
-    if (!confirm('Remove your payment QR code? Bills will show UPI ID text only.')) return;
+    setConfirmDialog('removeQr');
+  };
+
+  const doQrRemove = async () => {
+    setConfirmDialog(null);
     try {
       await supabase
         .from('shops')
@@ -230,16 +280,20 @@ export default function Settings() {
       setTimeout(() => setPhotoSaved(false), 2500);
     } catch (err) {
       console.error('Shop photo upload error:', err);
-      setPhotoError(err.message || 'Upload failed');
+      setPhotoError(friendlyError(err));
     } finally {
       setPhotoUploading(false);
     }
   };
 
   // ── Remove shop photo ─────────────────────────────────────────────────────
-  const handlePhotoRemove = async () => {
+  const handlePhotoRemove = () => {
     if (!shop?.shopPhotoUrl) return;
-    if (!confirm('Remove your shop photo?')) return;
+    setConfirmDialog('removePhoto');
+  };
+
+  const doPhotoRemove = async () => {
+    setConfirmDialog(null);
     try {
       await supabase
         .from('shops')
@@ -256,8 +310,12 @@ export default function Settings() {
     i18n.changeLanguage(code);
   };
 
-  const handleLogout = async () => {
-    if (!confirm(t('settings.logoutConfirm'))) return;
+  const handleLogout = () => {
+    setConfirmDialog('logout');
+  };
+
+  const doLogout = async () => {
+    setConfirmDialog(null);
     await signOut(auth);
     await supabase.auth.signOut().catch(() => {});
     setUser(null);
@@ -278,16 +336,16 @@ export default function Settings() {
             </p>
             {shop?.plan !== 'paid' && (
               <p className="text-xs text-gray-500 mt-0.5">
-                {shop?.billsThisMonth || 0} / 30 bills used this month
+                {t('settings.billsUsedThisMonth', { used: shop?.billsThisMonth || 0 })}
               </p>
             )}
           </div>
           {shop?.plan !== 'paid' && (
             <button
               className="text-xs font-bold text-accent border border-accent rounded-lg px-2 py-1"
-              onClick={() => window.open(`https://wa.me/91${shop?.phone || ''}?text=${encodeURIComponent('Hi, I want to upgrade NatBolt Billu to Paid Plan for ₹299/month. Shop: ' + shop?.shopName)}`, '_blank')}
+              onClick={() => window.open(`https://wa.me/919738007523?text=${encodeURIComponent('Hi, I want to unlock unlimited billing on NatBolt Billu (₹299/month). Shop: ' + shop?.shopName)}`, '_blank')}
             >
-              Upgrade
+              {t('settings.unlockBtn')}
             </button>
           )}
         </div>
@@ -338,9 +396,7 @@ export default function Settings() {
 
           {/* City */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
-              City <span className="text-gray-400">(for shop code & analytics)</span>
-            </label>
+            <label className="text-xs text-gray-500 mb-1 block">City</label>
             <select
               className="input-field"
               value={form.city}
@@ -353,13 +409,12 @@ export default function Settings() {
                 </option>
               ))}
             </select>
+            <p className="text-xs text-gray-400 mt-1">Used to generate your shop code and for analytics.</p>
           </div>
 
           {/* Pincode */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
-              Pincode <span className="text-gray-400">(for shop code & analytics)</span>
-            </label>
+            <label className="text-xs text-gray-500 mb-1 block">Pincode</label>
             <input
               className="input-field"
               placeholder="e.g. 500032"
@@ -368,6 +423,7 @@ export default function Settings() {
               value={form.pincode}
               onChange={set('pincode')}
             />
+            <p className="text-xs text-gray-400 mt-1">Used to generate your shop code and for analytics.</p>
           </div>
 
           {/* Google Maps share link */}
@@ -409,10 +465,10 @@ export default function Settings() {
         <div className="card space-y-3">
           <div className="flex items-center gap-2">
             <Image className="w-4 h-4 text-brand-mid" />
-            <p className="section-label mb-0">Shop Photo</p>
+            <p className="section-label mb-0">{t('settings.shopPhoto')}</p>
           </div>
           <p className="text-xs text-gray-500 -mt-1">
-            Upload your shop photo. It will appear on bill PDFs.
+            {t('settings.shopPhotoDesc')}
           </p>
 
           {/* Current / new photo preview */}
@@ -448,23 +504,23 @@ export default function Settings() {
                         : photoSaved
                         ? <CheckCircle className="w-4 h-4" />
                         : <Upload className="w-4 h-4" />}
-                      {photoUploading ? 'Uploading...' : photoSaved ? 'Saved!' : 'Save Photo'}
+                      {photoUploading ? t('settings.uploading') : photoSaved ? t('settings.savedShort') : t('settings.savePhoto')}
                     </button>
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-green-600 font-semibold">✓ Shop photo set</p>
+                    <p className="text-xs text-green-600 font-semibold">{t('settings.shopPhotoSet')}</p>
                     <button
                       className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
                       onClick={() => photoInputRef.current?.click()}
                     >
-                      Replace photo
+                      {t('settings.replacePhoto')}
                     </button>
                     <button
                       className="w-full text-xs text-red-400 font-medium py-1"
                       onClick={handlePhotoRemove}
                     >
-                      Remove photo
+                      {t('settings.removePhoto')}
                     </button>
                   </>
                 )}
@@ -474,11 +530,11 @@ export default function Settings() {
             /* No photo yet */
             <button
               onClick={() => photoInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-gray-50"
+              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
             >
               <Upload className="w-6 h-6" />
-              <span className="text-sm font-medium">Tap to upload shop photo</span>
-              <span className="text-xs">PNG or JPG — appears on bill PDFs</span>
+              <span className="text-sm font-medium">{t('settings.uploadPhotoBtn')}</span>
+              <span className="text-xs">{t('settings.uploadPhotoHint')}</span>
             </button>
           )}
 
@@ -497,10 +553,10 @@ export default function Settings() {
         <div className="card space-y-3">
           <div className="flex items-center gap-2">
             <QrCode className="w-4 h-4 text-brand-mid" />
-            <p className="section-label mb-0">Payment QR Code</p>
+            <p className="section-label mb-0">{t('settings.paymentQr')}</p>
           </div>
           <p className="text-xs text-gray-500 -mt-1">
-            Your own verified QR image appears on every bill PDF. Customers scan it to pay.
+            {t('settings.paymentQrDesc')}
           </p>
 
           {/* Current / new QR preview */}
@@ -536,23 +592,23 @@ export default function Settings() {
                         : qrSaved
                         ? <CheckCircle className="w-4 h-4" />
                         : <Upload className="w-4 h-4" />}
-                      {qrUploading ? 'Uploading...' : qrSaved ? 'Saved!' : 'Save QR Code'}
+                      {qrUploading ? t('settings.uploading') : qrSaved ? t('settings.savedShort') : t('settings.saveQr')}
                     </button>
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-green-600 font-semibold">✓ QR code set</p>
+                    <p className="text-xs text-green-600 font-semibold">{t('settings.qrSet')}</p>
                     <button
                       className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      Replace QR image
+                      {t('settings.replaceQr')}
                     </button>
                     <button
                       className="w-full text-xs text-red-400 font-medium py-1"
                       onClick={handleQrRemove}
                     >
-                      Remove QR code
+                      {t('settings.removeQr')}
                     </button>
                   </>
                 )}
@@ -562,11 +618,11 @@ export default function Settings() {
             /* No QR yet */
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-gray-50"
+              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
             >
               <Upload className="w-6 h-6" />
-              <span className="text-sm font-medium">Tap to upload QR image</span>
-              <span className="text-xs">PNG or JPG — appears on every bill PDF</span>
+              <span className="text-sm font-medium">{t('settings.uploadQrBtn')}</span>
+              <span className="text-xs">{t('settings.uploadQrHint')}</span>
             </button>
           )}
 
@@ -583,7 +639,7 @@ export default function Settings() {
 
         {/* ── Account ── */}
         <div className="card">
-          <p className="text-sm text-gray-500 mb-1">Signed in as</p>
+          <p className="text-sm text-gray-500 mb-1">{t('settings.signedInAs')}</p>
           <p className="font-semibold">{shop?.phone}</p>
           <button
             className="mt-4 w-full flex items-center justify-center gap-2 text-red-500 font-semibold py-3 border border-red-200 rounded-xl"
@@ -595,6 +651,38 @@ export default function Settings() {
         </div>
 
       </div>
+
+      {/* ── Confirm modals ── */}
+      {confirmDialog === 'removeQr' && (
+        <ConfirmModal
+          title="Remove payment QR?"
+          body="Your bill PDFs will show only the UPI ID text. You can re-upload anytime."
+          confirmLabel="Remove QR"
+          cancelLabel="Keep QR"
+          onConfirm={doQrRemove}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+      {confirmDialog === 'removePhoto' && (
+        <ConfirmModal
+          title="Remove shop photo?"
+          body="Your bill PDFs won't show a shop photo. You can re-upload anytime."
+          confirmLabel="Remove photo"
+          cancelLabel="Keep photo"
+          onConfirm={doPhotoRemove}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+      {confirmDialog === 'logout' && (
+        <ConfirmModal
+          title="Sign out?"
+          body="You'll need to enter your phone number and OTP to sign back in."
+          confirmLabel="Sign out"
+          cancelLabel="Stay signed in"
+          onConfirm={doLogout}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </Layout>
   );
 }

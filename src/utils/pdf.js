@@ -311,11 +311,36 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   }
 
   // ── Footer ───────────────────────────────────────────────────────────────────
+  y += 8; // Add extra space after QR/payment section
+
   doc.setTextColor(...GRAY);
   doc.setFont(F, 'normal');
   doc.setFontSize(7);
-  doc.text(t('pdf.thankYou'), W / 2, y + 4, { align: 'center' });
-  doc.text(t('pdf.poweredBy'), W / 2, y + 8, { align: 'center' });
+  doc.text(t('pdf.thankYou'), W / 2, y, { align: 'center' });
+
+  y += 2; // Space between thank you and logo
+
+  // NatBolt logo (centered)
+  try {
+    const logoRes = await fetch('/icons/logo.png');
+    if (logoRes.ok) {
+      const logoBlob = await logoRes.blob();
+      const logoData = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(logoBlob);
+      });
+      const logoSize = 10; // 10mm square logo
+      doc.addImage(logoData, 'PNG', (W - logoSize) / 2, y, logoSize, logoSize);
+      y += logoSize + 2; // Logo height + small gap
+    }
+  } catch (err) {
+    console.warn('[NatBolt PDF] Logo load failed:', err.message);
+    y += 2; // Small gap even if logo fails
+  }
+
+  doc.text(t('pdf.poweredBy'), W / 2, y + 2, { align: 'center' });
 
   return doc;
 }

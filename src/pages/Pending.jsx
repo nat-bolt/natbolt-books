@@ -40,7 +40,7 @@ export default function Pending() {
       </div>
 
       <a
-        href="https://wa.me/919738007523?text=Hi, please register my shop on NatBolt Billu. My number is +91 {{phone}}"
+        href={`https://wa.me/919738007523?text=${encodeURIComponent(`Hi, please register my shop on NatBolt Billu. My number is ${formatted}`)}`}
         className="flex items-center gap-2 bg-green-500 text-white font-semibold px-6 py-3 rounded-xl mb-4"
         target="_blank"
         rel="noopener noreferrer"

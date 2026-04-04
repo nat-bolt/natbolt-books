@@ -56,7 +56,7 @@ function UpgradeWall({ onUpgrade }) {
       <p className="text-gray-500 text-sm mb-8 max-w-xs">{t('income.upgradePrompt')}</p>
       <button className="btn-primary flex items-center gap-2 px-6 py-3" onClick={onUpgrade}>
         <Crown className="w-5 h-5" />
-        Upgrade to Paid — ₹299/month
+        Unlock unlimited billing — ₹299/month
       </button>
     </div>
   );
