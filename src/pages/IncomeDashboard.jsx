@@ -199,7 +199,8 @@ export default function IncomeDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto pb-6">
+    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
       {/* Header
           paddingTop includes env(safe-area-inset-top) so content clears the Dynamic Island
           and notch on all iPhone models when installed as a PWA (black-translucent status bar). */}

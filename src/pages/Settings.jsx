@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
@@ -18,10 +19,13 @@ const LANGUAGES = [
 
 // ── Reusable confirmation modal ───────────────────────────────────────────────
 function ConfirmModal({ title, body, confirmLabel, cancelLabel = 'Keep it', onConfirm, onCancel }) {
-  return (
+  // Rendered via createPortal so it escapes the Layout <main> overflow/stacking
+  // context — fixes modals appearing behind the bottom nav on iOS WebKit PWA.
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onCancel}>
       <div
-        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-y-auto"
+        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag indicator — signals the sheet is scrollable if content overflows */}
@@ -43,7 +47,8 @@ function ConfirmModal({ title, body, confirmLabel, cancelLabel = 'Keep it', onCo
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

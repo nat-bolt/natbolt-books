@@ -316,7 +316,8 @@ export default function CustomerProfile() {
   if (!customer) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto pb-6">
+    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
       {/* Header
           paddingTop includes env(safe-area-inset-top) so the back button and phone icon
           clear the Dynamic Island / notch on iPhone PWA (black-translucent status bar). */}

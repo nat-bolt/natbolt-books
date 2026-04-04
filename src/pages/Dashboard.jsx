@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,10 +16,13 @@ const FREE_LIMIT = FREE_BILL_LIMIT;
 
 // ── Upgrade modal (shown when free user taps a paid feature) ──────────────────
 function UpgradeModal({ feature, onClose, onUpgrade }) {
-  return (
+  // Rendered via createPortal so it escapes the Layout <main> overflow/stacking
+  // context — fixes modals appearing behind the bottom nav on iOS WebKit PWA.
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
       <div
-        className="relative bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 pb-10 text-center max-h-[85vh] overflow-y-auto"
+        className="relative bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 text-center max-h-[85vh] overflow-y-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <button className="absolute top-4 right-4 text-gray-400 p-1" onClick={onClose}>
@@ -45,7 +49,8 @@ function UpgradeModal({ feature, onClose, onUpgrade }) {
           {t('dashboard.maybeLater')}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -858,7 +858,8 @@ export default function AdminPanel() {
         </button>
       </header>
 
-      <div className="p-4 pb-40 space-y-4">
+      <div className="p-4 space-y-4"
+        style={{ paddingBottom: 'calc(max(env(safe-area-inset-bottom), 8px) + 32px)' }}>
 
         {/* ── Stats grid (4 cards) ── */}
         <div className="grid grid-cols-2 gap-3">
