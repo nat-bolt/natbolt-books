@@ -200,8 +200,13 @@ export default function IncomeDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-lg mx-auto pb-6">
-      {/* Header */}
-      <header className="bg-brand-dark text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10 shadow-md">
+      {/* Header
+          paddingTop includes env(safe-area-inset-top) so content clears the Dynamic Island
+          and notch on all iPhone models when installed as a PWA (black-translucent status bar). */}
+      <header
+        className="bg-brand-dark text-white px-4 flex items-center gap-3 sticky top-0 z-10 shadow-md"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
+      >
         <button onClick={() => navigate(-1)} className="p-1.5 rounded-xl bg-white/10">
           <ArrowLeft className="w-5 h-5" />
         </button>

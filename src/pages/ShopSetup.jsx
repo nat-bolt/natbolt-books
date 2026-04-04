@@ -182,7 +182,10 @@ export default function ShopSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-dark to-brand-mid flex flex-col items-center justify-start p-6 pt-10">
+    <div
+      className="min-h-screen bg-gradient-to-b from-brand-dark to-brand-mid flex flex-col items-center justify-start p-6"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 24px)' }}
+    >
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-6">

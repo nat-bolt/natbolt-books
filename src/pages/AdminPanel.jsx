@@ -842,8 +842,13 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-lg mx-auto">
-      {/* Header */}
-      <header className="bg-brand-dark text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-md">
+      {/* Header
+          paddingTop includes env(safe-area-inset-top) so the logout button and title clear
+          the Dynamic Island / notch on iPhone PWA (black-translucent status bar). */}
+      <header
+        className="bg-brand-dark text-white px-4 flex items-center justify-between sticky top-0 z-10 shadow-md"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
+      >
         <div>
           <h1 className="text-lg font-bold">NatBolt Admin</h1>
           <p className="text-xs text-brand-light">{user?.phoneNumber}</p>
