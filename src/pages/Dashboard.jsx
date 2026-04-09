@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   PlusCircle, Receipt, FileText, TrendingUp,
-  AlertCircle, Download, Users, Lock, Crown, X
+  AlertCircle, Download, Users, Lock, Crown, X, LockOpen
 } from 'lucide-react';
 import { supabase, mapBill } from '../supabase';
 import useStore from '../store/useStore';
@@ -16,13 +16,14 @@ const FREE_LIMIT = FREE_BILL_LIMIT;
 
 // ── Upgrade modal (shown when free user taps a paid feature) ──────────────────
 function UpgradeModal({ feature, onClose, onUpgrade }) {
+  const { t } = useTranslation();
   // Rendered via createPortal so it escapes the Layout <main> overflow/stacking
   // context — fixes modals appearing behind the bottom nav on iOS WebKit PWA.
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="relative bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 text-center max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
+        className="relative bg-white rounded-3xl p-6 text-center max-h-[85vh] overflow-y-auto"
+        style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <button className="absolute top-4 right-4 text-gray-400 p-1" onClick={onClose}>
@@ -38,12 +39,17 @@ function UpgradeModal({ feature, onClose, onUpgrade }) {
         <p className="text-xs text-gray-400 mb-6">
           {t('dashboard.upgradeFeatureBody')}
         </p>
+        <div className="flex justify-center mb-4">
+          <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+            Save 38% • Limited Time Offer
+          </div>
+        </div>
         <button
           className="btn-accent w-full flex items-center justify-center gap-2 py-3"
           onClick={onUpgrade}
         >
           <Crown className="w-4 h-4" />
-          {t('dashboard.upgradeFeatureCta')}
+          <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
         </button>
         <button className="mt-3 text-sm text-gray-400 w-full py-2" onClick={onClose}>
           {t('dashboard.maybeLater')}
@@ -170,18 +176,36 @@ export default function Dashboard() {
 
         {/* Stats cards */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="card text-center">
+          <button
+            className="card text-center active:bg-brand-light transition-colors"
+            onClick={() => {
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
+              navigate('/income?period=today');
+            }}
+          >
             <p className="text-2xl font-bold text-brand-dark">{stats.today}</p>
             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.today')}</p>
-          </div>
-          <div className="card text-center">
+          </button>
+          <button
+            className="card text-center active:bg-brand-light transition-colors"
+            onClick={() => {
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
+              navigate('/income?period=thisMonth');
+            }}
+          >
             <p className="text-2xl font-bold text-brand-dark">{stats.month}</p>
             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.thisMonth')}</p>
-          </div>
-          <div className="card text-center">
+          </button>
+          <button
+            className="card text-center active:bg-brand-light transition-colors"
+            onClick={() => {
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
+              navigate('/income?period=thisMonth');
+            }}
+          >
             <p className="text-lg font-bold text-green-600">{fmtCurrency(stats.revenue)}</p>
             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.monthRevenue')}</p>
-          </div>
+          </button>
         </div>
 
         {/* New Bill (primary) + New Estimate (paid / secondary for free users) */}
@@ -199,10 +223,11 @@ export default function Dashboard() {
           {/* New Estimate — full accent for paid; outlined/secondary for free to signal locked */}
           {shop?.plan === 'paid' ? (
             <button
-              className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold"
+              className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold relative"
               onClick={() => navigate('/estimate/new')}
               disabled={isAtLimit}
             >
+              <LockOpen className="w-3.5 h-3.5 absolute top-2 right-2 text-green-400 opacity-80" />
               <FileText className="w-5 h-5" />
               {t('dashboard.newEstimate')}
             </button>
@@ -222,16 +247,32 @@ export default function Dashboard() {
         {/* Quick action row */}
         <div className="grid grid-cols-3 gap-3">
           <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light"
-            onClick={() => navigate('/customers')}
+            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
+            onClick={() => {
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.customers')); return; }
+              navigate('/customers');
+            }}
           >
-            <Users className="w-5 h-5 text-brand-mid" />
+            {shop?.plan === 'paid' ? (
+              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
+            ) : (
+              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
+            )}
+            <Users className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-brand-mid' : 'text-gray-400'}`} />
             <span className="text-xs font-semibold text-brand-dark">{t('dashboard.customers')}</span>
           </button>
           <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light"
-            onClick={() => navigate('/income')}
+            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
+            onClick={() => {
+              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
+              navigate('/income');
+            }}
           >
+            {shop?.plan === 'paid' ? (
+              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
+            ) : (
+              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
+            )}
             <TrendingUp className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-green-600' : 'text-gray-400'}`} />
             <span className="text-xs font-semibold text-brand-dark">{t('dashboard.income')}</span>
           </button>
@@ -242,7 +283,11 @@ export default function Dashboard() {
               exportBillsCSV(bills, shop);
             }}
           >
-            {shop?.plan !== 'paid' && <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />}
+            {shop?.plan === 'paid' ? (
+              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
+            ) : (
+              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
+            )}
             <Download className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-brand-mid' : 'text-gray-400'}`} />
             <span className="text-xs font-semibold text-brand-dark">{t('dashboard.exportCsv')}</span>
           </button>

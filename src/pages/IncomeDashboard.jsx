@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, TrendingUp, Receipt, IndianRupee,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase, mapBill } from '../supabase';
 import useStore from '../store/useStore';
+import Layout from '../components/Layout';
 
 // ── Tiny bar chart ─────────────────────────────────────────────────────────────
 function MiniBarChart({ data }) {
@@ -48,17 +49,24 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-dark', bg
 function UpgradeWall({ onUpgrade }) {
   const { t } = useTranslation();
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto">
-      <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-        <Lock className="w-10 h-10 text-amber-600" />
+    <Layout title={t('income.title')}>
+      <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
+        <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <Lock className="w-10 h-10 text-amber-600" />
+        </div>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">{t('income.paidFeature')}</h2>
+        <p className="text-gray-500 text-sm mb-8 max-w-xs">{t('income.upgradePrompt')}</p>
+        <div className="space-y-3 w-full max-w-sm">
+          <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+            Save 38% • Limited Time Offer
+          </div>
+          <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
+            <Crown className="w-5 h-5" />
+            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+          </button>
+        </div>
       </div>
-      <h2 className="text-xl font-bold text-brand-dark mb-2">{t('income.paidFeature')}</h2>
-      <p className="text-gray-500 text-sm mb-8 max-w-xs">{t('income.upgradePrompt')}</p>
-      <button className="btn-primary flex items-center gap-2 px-6 py-3" onClick={onUpgrade}>
-        <Crown className="w-5 h-5" />
-        Unlock unlimited billing — ₹299/month
-      </button>
-    </div>
+    </Layout>
   );
 }
 
@@ -89,8 +97,13 @@ export default function IncomeDashboard() {
   const navigate     = useNavigate();
   const { t }        = useTranslation();
   const { shop }     = useStore();
+  const [searchParams] = useSearchParams();
 
-  const [period, setPeriod]   = useState('thisMonth');
+  // Read initial period from URL params (e.g., /income?period=today)
+  const initialPeriod = searchParams.get('period') || 'thisMonth';
+  const validPeriod = PERIODS.includes(initialPeriod) ? initialPeriod : 'thisMonth';
+
+  const [period, setPeriod]   = useState(validPeriod);
   const [bills, setBills]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');

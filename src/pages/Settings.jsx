@@ -22,10 +22,10 @@ function ConfirmModal({ title, body, confirmLabel, cancelLabel = 'Keep it', onCo
   // Rendered via createPortal so it escapes the Layout <main> overflow/stacking
   // context — fixes modals appearing behind the bottom nav on iOS WebKit PWA.
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onCancel}>
       <div
-        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
+        className="bg-white rounded-3xl p-6 max-h-[85vh] overflow-y-auto"
+        style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag indicator — signals the sheet is scrollable if content overflows */}
@@ -333,25 +333,34 @@ export default function Settings() {
       <div className="p-4 space-y-4">
 
         {/* ── Plan banner ── */}
-        <div className={`rounded-2xl p-4 flex items-center gap-3 ${shop?.plan === 'paid' ? 'bg-amber-50 border border-amber-200' : 'bg-brand-light border border-brand-mid/20'}`}>
-          <Crown className={`w-6 h-6 flex-shrink-0 ${shop?.plan === 'paid' ? 'text-amber-500' : 'text-brand-mid'}`} />
-          <div className="flex-1">
-            <p className="font-bold text-sm text-brand-dark">
-              {shop?.plan === 'paid' ? t('settings.paidPlan') : t('settings.freePlan')}
-            </p>
-            {shop?.plan !== 'paid' && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                {t('settings.billsUsedThisMonth', { used: shop?.billsThisMonth || 0 })}
+        <div className={`rounded-2xl p-4 ${shop?.plan === 'paid' ? 'bg-amber-50 border border-amber-200' : 'bg-brand-light border border-brand-mid/20'}`}>
+          <div className="flex items-center gap-3">
+            <Crown className={`w-6 h-6 flex-shrink-0 ${shop?.plan === 'paid' ? 'text-amber-500' : 'text-brand-mid'}`} />
+            <div className="flex-1">
+              <p className="font-bold text-sm text-brand-dark">
+                {shop?.plan === 'paid' ? t('settings.paidPlan') : t('settings.freePlan')}
               </p>
-            )}
+              {shop?.plan !== 'paid' && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {t('settings.billsUsedThisMonth', { used: shop?.billsThisMonth || 0 })}
+                </p>
+              )}
+            </div>
           </div>
           {shop?.plan !== 'paid' && (
-            <button
-              className="text-xs font-bold text-accent border border-accent rounded-lg px-2 py-1"
-              onClick={() => window.open(`https://wa.me/919738007523?text=${encodeURIComponent('Hi, I want to unlock unlimited billing on NatBolt Billu (₹299/month). Shop: ' + shop?.shopName)}`, '_blank')}
-            >
-              {t('settings.unlockBtn')}
-            </button>
+            <div className="mt-3 space-y-2">
+              <div className="flex justify-center">
+                <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  Save 38% • Limited Time Offer
+                </div>
+              </div>
+              <button
+                className="w-full text-xs font-bold text-white bg-accent rounded-xl px-4 py-2.5 flex items-center justify-center gap-2"
+                onClick={() => window.open(`https://wa.me/919738007523?text=${encodeURIComponent('Hi, I want to unlock unlimited billing on NatBolt Billu. Shop: ' + shop?.shopName)}`, '_blank')}
+              >
+                <span>Unlock at <span className="line-through opacity-70">₹799</span> ₹499/month</span>
+              </button>
+            </div>
           )}
         </div>
 

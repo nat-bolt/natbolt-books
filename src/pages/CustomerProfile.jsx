@@ -4,11 +4,39 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Phone, FileText, Receipt,
   ChevronRight, Calendar, IndianRupee,
-  Plus, X, Car, Bike,
+  Plus, X, Car, Bike, Lock, Crown,
 } from 'lucide-react';
 import { supabase, mapCustomer, mapBill, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
+import Layout from '../components/Layout';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
+
+// ── Upgrade wall (shown when free user tries to access customer profile) ─────
+function UpgradeWall({ onUpgrade }) {
+  const { t } = useTranslation();
+  return (
+    <Layout title="Customer Profile">
+      <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
+        <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <Lock className="w-10 h-10 text-amber-600" />
+        </div>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">Customer Profiles are a Paid Feature</h2>
+        <p className="text-gray-500 text-sm mb-8 max-w-xs">
+          Upgrade to view detailed customer profiles, manage vehicle history, and unlock unlimited billing.
+        </p>
+        <div className="space-y-3 w-full max-w-sm">
+          <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+            Save 38% • Limited Time Offer
+          </div>
+          <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
+            <Crown className="w-5 h-5" />
+            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+          </button>
+        </div>
+      </div>
+    </Layout>
+  );
+}
 
 // ── Vehicle type icon helper ──────────────────────────────────────────────────
 const VEHICLE_TYPE_EMOJIS = {
@@ -307,6 +335,11 @@ export default function CustomerProfile() {
     };
     return map[status] || 'bg-gray-100 text-gray-600';
   };
+
+  // ── Gate: show upgrade wall for free users ────────────────────────────────
+  if (shop?.plan !== 'paid') {
+    return <UpgradeWall onUpgrade={() => navigate('/settings')} />;
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-brand-light">

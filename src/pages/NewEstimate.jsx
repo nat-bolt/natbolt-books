@@ -1,11 +1,39 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, Trash2, X, CheckCircle } from 'lucide-react';
+import { Search, Plus, Trash2, X, CheckCircle, Lock, Crown } from 'lucide-react';
 import { supabase, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
+
+// ── Upgrade wall (shown when free user tries to create an estimate) ──────────
+function UpgradeWall({ onUpgrade }) {
+  const { t } = useTranslation();
+  return (
+    <Layout title={t('estimate.newTitle')}>
+      <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
+        <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <Lock className="w-10 h-10 text-amber-600" />
+        </div>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">Estimates are a Paid Feature</h2>
+        <p className="text-gray-500 text-sm mb-8 max-w-xs">
+          Upgrade to create estimates, manage quotes, and unlock unlimited billing.
+        </p>
+        <div className="space-y-3 w-full max-w-sm">
+          <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+            Save 38% • Limited Time Offer
+          </div>
+          <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
+            <Crown className="w-5 h-5" />
+            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+          </button>
+        </div>
+      </div>
+    </Layout>
+  );
+}
 
 // ── Language-aware part name ───────────────────────────────────────────────────
 function getPartName(part, language) {
@@ -118,10 +146,18 @@ function CustomerModal({ onSelect, onClose }) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}>
+  // createPortal escapes the Layout <main> overflow stacking context (iOS WebKit).
+  // Centred layout avoids all bottom-nav overlap issues entirely.
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl p-5 max-h-[80vh] overflow-y-auto"
+        style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-brand-dark text-lg">{t('customer.search')}</h3>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
@@ -266,7 +302,8 @@ function CustomerModal({ onSelect, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -301,10 +338,16 @@ function PartsModal({ catalogue, onAdd, onClose }) {
     });
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-5 h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl p-5 max-h-[80vh] flex flex-col"
+        style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-brand-dark text-lg">{t('parts.addFromCatalogue')}</h3>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
@@ -389,7 +432,8 @@ function PartsModal({ catalogue, onAdd, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -640,6 +684,11 @@ export default function NewEstimate() {
   const activeVehicle = customerVehicles.find((v) => v.id === selectedVehicleId);
 
   const isBill = docMode === 'bill';
+
+  // ── Gate: show upgrade wall if free user tries to create estimate ─────────
+  if (shop?.plan !== 'paid' && docMode === 'estimate') {
+    return <UpgradeWall onUpgrade={() => navigate('/settings')} />;
+  }
 
   return (
     <Layout title={isBill ? 'New Bill' : t('estimate.newTitle')} showBack>
