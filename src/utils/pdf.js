@@ -144,38 +144,20 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
 
   y += 15;
 
-  // ── Bill meta (two columns) ─────────────────────────────────────────────────
+  // ── Bill meta / job photo layout ────────────────────────────────────────────
   doc.setTextColor(...TEXT);
   doc.setFont(F, 'normal');
   doc.setFontSize(8);
 
-  const metaLeft = [
+  const metaEntries = [
     [t('pdf.billNo'), bill.billNumber || bill.estimateNumber || '-'],
-    [t('pdf.date'),   fmtDate(bill.createdAt)],
-  ];
-  const metaRight = [
+    [t('pdf.date'), fmtDate(bill.createdAt)],
     [t('pdf.customerName'), customer?.name || bill.customerName || '-'],
-    [t('pdf.phone'),        customer?.phone || bill.customerPhone || '-'],
-    [t('pdf.vehicleNo'),    bill.vehicleNo || '-'],
-    [t('pdf.vehicleType'),  `${bill.vehicleBrand || ''} ${bill.vehicleModel || ''}`.trim() || '-'],
+    [t('pdf.phone'), customer?.phone || bill.customerPhone || '-'],
+    [t('pdf.vehicleNo'), bill.vehicleNo || '-'],
+    [t('pdf.vehicleType'), `${bill.vehicleBrand || ''} ${bill.vehicleModel || ''}`.trim() || '-'],
   ];
 
-  metaLeft.forEach(([label, val], i) => {
-    doc.setFont(F, 'bold');
-    doc.text(`${label}:`, M + 2, y + i * 6);
-    doc.setFont(F, 'normal');
-    doc.text(String(val), M + 16, y + i * 6);
-  });
-  metaRight.forEach(([label, val], i) => {
-    doc.setFont(F, 'bold');
-    doc.text(`${label}:`, W / 2 + 2, y + i * 6);
-    doc.setFont(F, 'normal');
-    doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
-  });
-
-  y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
-
-  // ── Job Photo (if available) ─────────────────────────────────────────────────
   if (bill.jobPhotoUrl) {
     try {
       const res = await fetch(bill.jobPhotoUrl);
@@ -195,19 +177,95 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
           img.src = imgData;
         });
 
-        const maxW = 60;
-        const imgW = Math.min(maxW, (img.width / img.height) * 40);
+        const photoBoxW = 42;
+        const photoBoxH = 32;
+        const photoGap = 16;
+        const imgW = Math.min(photoBoxW, (img.width / img.height) * photoBoxH);
         const imgH = (img.height / img.width) * imgW;
+        const photoX = M;
+        const photoY = y;
+        const textX = photoX + photoBoxW + photoGap;
+        const valueX = textX + 24;
+        const textWidth = W - M - textX;
+        const lineGap = 5.2;
 
-        // Center the photo
-        const photoX = (W - imgW) / 2;
-        doc.addImage(imgData, 'JPEG', photoX, y, imgW, imgH);
-        y += imgH + 4;
+        doc.setDrawColor(...LIGHT_GRAY);
+        doc.rect(photoX, photoY, photoBoxW, photoBoxH);
+        doc.addImage(
+          imgData,
+          'JPEG',
+          photoX + (photoBoxW - imgW) / 2,
+          photoY + (photoBoxH - imgH) / 2,
+          imgW,
+          imgH
+        );
+
+        metaEntries.forEach(([label, val], i) => {
+          const rowY = photoY + 4 + i * lineGap;
+          doc.setFont(F, 'bold');
+          doc.text(`${label}:`, textX, rowY);
+          doc.setFont(F, 'normal');
+          doc.text(String(val).substring(0, 24), valueX, rowY, { maxWidth: Math.max(10, textWidth - 24) });
+        });
+
+        y += Math.max(photoBoxH, 4 + metaEntries.length * lineGap) + 4;
+      } else {
+        const metaLeft = metaEntries.slice(0, 2);
+        const metaRight = metaEntries.slice(2);
+
+        metaLeft.forEach(([label, val], i) => {
+          doc.setFont(F, 'bold');
+          doc.text(`${label}:`, M + 2, y + i * 6);
+          doc.setFont(F, 'normal');
+          doc.text(String(val), M + 16, y + i * 6);
+        });
+        metaRight.forEach(([label, val], i) => {
+          doc.setFont(F, 'bold');
+          doc.text(`${label}:`, W / 2 + 2, y + i * 6);
+          doc.setFont(F, 'normal');
+          doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
+        });
+
+        y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
       }
     } catch (err) {
       console.warn('[PDF] Job photo fetch failed:', err.message);
-      // Continue without photo
+      const metaLeft = metaEntries.slice(0, 2);
+      const metaRight = metaEntries.slice(2);
+
+      metaLeft.forEach(([label, val], i) => {
+        doc.setFont(F, 'bold');
+        doc.text(`${label}:`, M + 2, y + i * 6);
+        doc.setFont(F, 'normal');
+        doc.text(String(val), M + 16, y + i * 6);
+      });
+      metaRight.forEach(([label, val], i) => {
+        doc.setFont(F, 'bold');
+        doc.text(`${label}:`, W / 2 + 2, y + i * 6);
+        doc.setFont(F, 'normal');
+        doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
+      });
+
+      y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
     }
+  } else {
+    const metaLeft = metaEntries.slice(0, 2);
+    const metaRight = metaEntries.slice(2);
+
+    metaLeft.forEach(([label, val], i) => {
+      doc.setFont(F, 'bold');
+      doc.text(`${label}:`, M + 2, y + i * 6);
+      doc.setFont(F, 'normal');
+      doc.text(String(val), M + 16, y + i * 6);
+    });
+    metaRight.forEach(([label, val], i) => {
+      doc.setFont(F, 'bold');
+      doc.text(`${label}:`, W / 2 + 2, y + i * 6);
+      doc.setFont(F, 'normal');
+      doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
+    });
+
+    y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
   }
 
   // ── Parts table ──────────────────────────────────────────────────────────────
