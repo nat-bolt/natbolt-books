@@ -223,6 +223,44 @@ function ShopFormModal({ existing, onSave, onClose }) {
             .eq('id', data.id);
         }
 
+        // Send welcome WhatsApp message (admin → new shop owner)
+        try {
+          const ownerName = form.ownerName.trim() || 'there';
+          const shopName = form.shopName.trim();
+          const welcomeMessage = `🎉 Welcome to NatBolt Billu!
+
+Hi ${ownerName}! 👋
+
+Your shop "${shopName}" has been successfully registered with NatBolt Billu - India's simplest billing software for vehicle service shops!
+
+✨ What you can do now:
+✅ Create professional bills & estimates
+✅ Manage customers & vehicle history
+✅ Generate PDF invoices with QR codes
+✅ Track daily/monthly income & analytics
+✅ Export data to CSV
+
+📱 Login Details:
+Phone: ${e164}
+Download app: https://natbolt.com/billu
+
+🎁 You're on the FREE plan with 30 bills/month.
+Upgrade anytime for unlimited billing at just ₹499/month!
+
+Need help? Reply to this message!
+
+Happy billing! 🚀
+- NatBolt Team`;
+
+          const whatsappUrl = `https://wa.me/${e164.replace(/[^\d]/g, '')}?text=${encodeURIComponent(welcomeMessage)}`;
+
+          // Open WhatsApp in a new tab so admin can send the welcome message
+          window.open(whatsappUrl, '_blank');
+        } catch (whatsappErr) {
+          // Don't block shop creation if WhatsApp fails
+          console.warn('[AdminPanel] WhatsApp message failed:', whatsappErr);
+        }
+
         onSave(mapShop({ ...data, qr_code_url: qrCodeUrl, shop_photo_url: shopPhotoUrl }));
       }
       onClose();

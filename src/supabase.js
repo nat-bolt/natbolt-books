@@ -99,6 +99,7 @@ export function mapVehicle(row) {
     year:         row.year,
     color:        row.color,
     notes:        row.notes,
+    photoUrl:     row.photo_url,
     createdAt:    row.created_at,
   };
 }
@@ -129,6 +130,7 @@ export function mapBill(row) {
     paymentMode:           row.payment_mode,
     paidAmount:            Number(row.paid_amount    || 0),
     balanceDue:            Number(row.balance_due    || 0),
+    jobPhotoUrl:           row.job_photo_url         || null,
     convertedFromEstimate: row.converted_from_estimate,
     createdAt:             row.created_at,
     updatedAt:             row.updated_at,

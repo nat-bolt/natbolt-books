@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, Trash2, X, CheckCircle, Lock, Crown } from 'lucide-react';
+import { Search, Plus, Trash2, X, CheckCircle, Lock, Crown, Image, Camera } from 'lucide-react';
 import { supabase, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
@@ -464,6 +464,11 @@ export default function NewEstimate() {
     number: '', type: 'scooter', brand: '', model: '',
   });
 
+  // Job photo
+  const photoInputRef = useRef(null);
+  const [jobPhoto, setJobPhoto] = useState(null);           // File object
+  const [jobPhotoPreview, setJobPhotoPreview] = useState(''); // base64 preview
+
   // Parts & totals
   const [parts, setParts]     = useState([]);
   const [labour, setLabour]   = useState('');
@@ -551,6 +556,27 @@ export default function NewEstimate() {
 
   const vehicleBrands = getBrandsForType(vehicle.type);
   const vehicleModels = getModelsForBrand(vehicle.brand);
+
+  // Job photo handlers
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file (PNG/JPG)');
+      return;
+    }
+    setJobPhoto(file);
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => setJobPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const clearPhoto = () => {
+    setJobPhoto(null);
+    setJobPhotoPreview('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
 
   // Parts helpers
   const addPart = (part) => {
@@ -669,6 +695,34 @@ export default function NewEstimate() {
         .select()
         .single();
       if (insertErr) throw insertErr;
+
+      let jobPhotoUrl = null;
+
+      // Upload job photo if provided
+      if (jobPhoto && newBill?.id) {
+        const ext = jobPhoto.name.split('.').pop().toLowerCase() || 'jpg';
+        const path = `${shop.id}/jobs/${newBill.id}.${ext}`;
+
+        const { data: uploadData, error: upErr } = await supabase.storage
+          .from('shop-assets')
+          .upload(path, jobPhoto, { upsert: true, contentType: jobPhoto.type });
+
+        if (!upErr && uploadData) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('shop-assets')
+            .getPublicUrl(uploadData.path);
+
+          jobPhotoUrl = publicUrl;
+
+          // Update bill with photo URL
+          await supabase
+            .from('bills')
+            .update({ job_photo_url: jobPhotoUrl })
+            .eq('id', newBill.id);
+        } else if (upErr) {
+          console.warn('[NewEstimate] Job photo upload failed:', upErr.message);
+        }
+      }
 
       // Navigate to the right detail page
       navigate(docMode === 'bill' ? `/bill/${newBill.id}` : `/estimate/${newBill.id}`);
@@ -873,6 +927,56 @@ export default function NewEstimate() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Job Photo section ─────────────────────────────────────────────── */}
+        {customer && (selectedVehicleId || IS_NEW) && (
+          <div className="card space-y-3">
+            <p className="section-label">
+              <Camera className="w-4 h-4 inline mr-1" />
+              Job Photo (Optional)
+            </p>
+            <p className="text-xs text-gray-500 -mt-2">
+              Take a photo of the vehicle before starting work
+            </p>
+
+            {jobPhotoPreview ? (
+              <div className="relative">
+                <img
+                  src={jobPhotoPreview}
+                  alt="Job photo preview"
+                  className="w-full h-56 object-cover rounded-xl border-2 border-gray-200"
+                />
+                <button
+                  className="absolute top-3 right-3 bg-red-500 text-white p-2 rounded-full shadow-lg"
+                  onClick={clearPhoto}
+                  type="button"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center gap-3 text-gray-500 hover:border-brand-mid hover:text-brand-mid transition-colors active:bg-gray-50"
+                onClick={() => photoInputRef.current?.click()}
+                type="button"
+              >
+                <Camera className="w-12 h-12" />
+                <div className="text-center">
+                  <span className="text-sm font-medium block">Tap to take photo</span>
+                  <span className="text-xs">Helps track vehicle condition</span>
+                </div>
+              </button>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
           </div>
         )}
 

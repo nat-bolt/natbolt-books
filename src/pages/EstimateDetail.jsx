@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Download, MessageCircle, Pencil, Plus, Trash2, X, Check } from 'lucide-react';
+import { ArrowRight, Download, MessageCircle, Pencil, Plus, Trash2, X, Check, Camera } from 'lucide-react';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
@@ -356,6 +356,22 @@ export default function EstimateDetail() {
             </div>
           </div>
         </div>
+
+        {/* Job Photo */}
+        {bill.jobPhotoUrl && (
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <Camera className="w-4 h-4 text-brand-mid" />
+              <p className="section-label mb-0">Job Photo</p>
+            </div>
+            <img
+              src={bill.jobPhotoUrl}
+              alt="Job photo"
+              className="w-full rounded-xl border-2 border-gray-200 object-cover"
+              style={{ maxHeight: '300px' }}
+            />
+          </div>
+        )}
 
         {/* ── VIEW MODE: Parts ─────────────────────────────────────────────────── */}
         {!editMode && (

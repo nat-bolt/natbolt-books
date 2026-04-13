@@ -175,6 +175,41 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
 
   y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
 
+  // ── Job Photo (if available) ─────────────────────────────────────────────────
+  if (bill.jobPhotoUrl) {
+    try {
+      const res = await fetch(bill.jobPhotoUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        const imgData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        // Add photo with max width of 60mm, maintain aspect ratio
+        const img = new Image();
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.src = imgData;
+        });
+
+        const maxW = 60;
+        const imgW = Math.min(maxW, (img.width / img.height) * 40);
+        const imgH = (img.height / img.width) * imgW;
+
+        // Center the photo
+        const photoX = (W - imgW) / 2;
+        doc.addImage(imgData, 'JPEG', photoX, y, imgW, imgH);
+        y += imgH + 4;
+      }
+    } catch (err) {
+      console.warn('[PDF] Job photo fetch failed:', err.message);
+      // Continue without photo
+    }
+  }
+
   // ── Parts table ──────────────────────────────────────────────────────────────
   const colW = [8,  51, 12, 24, 28]; // Sr, Description, Qty, Rate, Amount
   const colX = [M, M+11, M+62, M+74, M+98];

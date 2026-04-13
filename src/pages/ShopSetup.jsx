@@ -168,7 +168,38 @@ export default function ShopSetup() {
           .eq('id', shopRow.id);
       }
 
-      // 5. Set in store and navigate
+      // 5. Send welcome WhatsApp message
+      try {
+        const welcomeMessage = `🎉 Welcome to NatBolt Billu!
+
+Hi ${form.ownerName || 'there'}! 👋
+
+Your shop "${form.shopName}" has been successfully registered!
+
+You can now:
+✅ Create unlimited bills (30/month on free plan)
+✅ Manage customers & vehicles
+✅ Generate professional PDFs
+✅ Track income & analytics
+
+Need help? Reply to this message!
+
+Happy billing! 🚀`;
+
+        const whatsappUrl = `https://wa.me/${phone.replace(/[^\d]/g, '')}?text=${encodeURIComponent(welcomeMessage)}`;
+
+        // Open WhatsApp in a new window (non-blocking)
+        // This will open WhatsApp Web/App with the pre-filled message
+        // The admin can then send it manually
+        if (typeof window !== 'undefined') {
+          window.open(whatsappUrl, '_blank');
+        }
+      } catch (whatsappErr) {
+        // Don't block registration if WhatsApp message fails
+        console.warn('[ShopSetup] WhatsApp message failed:', whatsappErr);
+      }
+
+      // 6. Set in store and navigate
       const mappedShop = mapShop({ ...shopRow, qr_code_url: finalQrUrl, shop_photo_url: finalPhotoUrl });
       setShop(mappedShop);
       navigate('/', { replace: true });
