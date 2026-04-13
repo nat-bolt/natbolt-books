@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Toaster } from 'react-hot-toast';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth } from './firebase';
 import { supabase, mapShop } from './supabase';
 import './i18n/index';
@@ -88,6 +89,7 @@ export default function App() {
         toastOptions={{ duration: 2500, style: { borderRadius: '12px', fontWeight: '600' } }}
       />
       <Analytics />
+      <SpeedInsights />
       <Routes>
         {/* Public */}
         <Route path="/login"   element={<Login />} />
