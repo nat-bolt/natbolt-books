@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Download, MessageCircle, Pencil, Plus, Trash2, X, Check, Camera } from 'lucide-react';
+import { ArrowRight, Pencil, Plus, Trash2, X, Check, Camera, Eye } from 'lucide-react';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
-import { downloadBillPDF, getBillPDFBlob } from '../utils/pdf';
+import PdfPreviewModal from '../components/PdfPreviewModal';
+import WhatsAppIcon from '../components/WhatsAppIcon';
+import { getBillPDFBlob, getBillPDFUrl } from '../utils/pdf';
+import { openWhatsApp } from '../utils/whatsapp';
 
 // ── Simple parts picker modal used in edit mode ────────────────────────────────
 function CatalogueModal({ catalogue, onAdd, onClose }) {
@@ -61,6 +64,8 @@ export default function EstimateDetail() {
   const [loading, setLoading]   = useState(true);
   const [converting, setConverting] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
 
   // ── Edit mode state ──────────────────────────────────────────────────────────
   const [editMode, setEditMode]     = useState(false);
@@ -70,6 +75,12 @@ export default function EstimateDetail() {
   const [catalogue, setCatalogue]   = useState([]);
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
 
   useEffect(() => {
     if (!shop) return;
@@ -190,19 +201,47 @@ export default function EstimateDetail() {
   };
 
   // ── PDF / WhatsApp ───────────────────────────────────────────────────────────
-  const handleDownloadPDF = async () => {
+  const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl('');
+    }
+    setShowPdfPreview(true);
     setPdfLoading(true);
     try {
-      await downloadBillPDF({ bill, shop, customer, t, lang: language });
-    } catch (err) { console.error(err); alert('PDF generation failed. Please try again.'); }
-    finally { setPdfLoading(false); }
+      const pdfUrl = await getBillPDFUrl({ bill, shop, customer, t, lang: language });
+      setPdfPreviewUrl(pdfUrl);
+    } catch (err) {
+      setShowPdfPreview(false);
+      console.error(err);
+      alert('PDF preview failed. Please try again.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    setPdfPreviewUrl('');
+    setShowPdfPreview(false);
+  };
+
+  const handleDownloadPreview = () => {
+    if (!pdfPreviewUrl || !bill) return;
+    const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
+    const a = document.createElement('a');
+    a.href = pdfPreviewUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleWhatsApp = async () => {
     if (!bill || !shop) return;
 
-    const phone    = (customer?.phone || '').replace(/\D/g, '');
+    const phone    = customer?.phone || bill.customerPhone || '';
     const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
     const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
     const msg =
@@ -211,9 +250,6 @@ export default function EstimateDetail() {
       `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')}\n` +
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
       `Thank you! 🙏\n\nPowered by NatBolt Billu`;
-    const waUrl = phone
-      ? `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 
     // Pre-flight: check file-sharing support synchronously (before any await)
     // so we can call window.open while still in the user-gesture context.
@@ -222,7 +258,7 @@ export default function EstimateDetail() {
       const testFile = new File([new Blob([''], { type: 'application/pdf' })], 't.pdf', { type: 'application/pdf' });
       canDoFileShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [testFile] });
     } catch (_) {}
-    if (!canDoFileShare) window.open(waUrl, '_blank');
+    if (!canDoFileShare) openWhatsApp(phone, msg);
 
     setPdfLoading(true);
     try {
@@ -312,6 +348,14 @@ export default function EstimateDetail() {
 
   return (
     <Layout showBack title={`${t('estimate.viewTitle')} ${bill.estimateNumber}`}>
+      <PdfPreviewModal
+        open={showPdfPreview}
+        pdfUrl={pdfPreviewUrl}
+        loading={pdfLoading}
+        onClose={handleClosePreview}
+        onDownload={handleDownloadPreview}
+      />
+
       <div className="p-4 space-y-4 pb-36">
 
         {isConverted && (
@@ -557,19 +601,19 @@ export default function EstimateDetail() {
         <div className="fixed bottom-14 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 p-4 space-y-2 z-10">
           <div className="flex gap-2">
             <button
-              className="btn-secondary flex-1 flex items-center justify-center gap-2"
-              onClick={handleDownloadPDF}
+              className="btn-primary flex-1 flex items-center justify-center gap-2"
+              onClick={handlePreviewPDF}
               disabled={pdfLoading}
             >
-              <Download className="w-4 h-4" />
-              {pdfLoading ? '…' : 'PDF'}
+              <Eye className="w-4 h-4" />
+              {pdfLoading ? '…' : t('bill.viewPdf')}
             </button>
             <button
               className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white rounded-xl py-3 font-semibold active:scale-95 transition-all disabled:opacity-60"
               onClick={handleWhatsApp}
               disabled={pdfLoading}
             >
-              <MessageCircle className="w-4 h-4" />
+              <WhatsAppIcon className="w-6 h-6" badge badgeClassName="p-1" />
               {pdfLoading ? '…' : 'WhatsApp'}
             </button>
           </div>

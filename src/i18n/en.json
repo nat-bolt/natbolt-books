@@ -99,6 +99,7 @@
     "balanceDue": "Balance Due",
     "collectPayment": "Collect Payment",
     "shareBill": "Share Bill",
+    "viewPdf": "View PDF",
     "downloadPdf": "Download PDF",
     "voidBill": "Void Bill",
     "voidConfirm": "Void this bill? This cannot be undone.",

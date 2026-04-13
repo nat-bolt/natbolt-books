@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Download, MessageCircle, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { CheckCircle, AlertCircle, Camera, Eye } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
-import { downloadBillPDF, getBillPDFBlob } from '../utils/pdf';
+import PdfPreviewModal from '../components/PdfPreviewModal';
+import WhatsAppIcon from '../components/WhatsAppIcon';
+import { getBillPDFBlob, getBillPDFUrl } from '../utils/pdf';
+import { openWhatsApp } from '../utils/whatsapp';
 
 export default function BillDetail() {
   const { id }   = useParams();
@@ -19,9 +22,17 @@ export default function BillDetail() {
   const [qrUrl, setQrUrl]       = useState('');
   const [loading, setLoading]   = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   const [payMode, setPayMode]   = useState('cash');
   const [paidAmt, setPaidAmt]   = useState('');
   const [payPanel, setPayPanel] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
 
   useEffect(() => {
     if (!shop) return;
@@ -100,18 +111,47 @@ export default function BillDetail() {
     if (!error) setBill((b) => ({ ...b, status: 'void' }));
   };
 
-  const handleDownloadPDF = async () => {
+  const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl('');
+    }
+    setShowPdfPreview(true);
     setPdfLoading(true);
-    try { await downloadBillPDF({ bill, shop, customer, t, lang: language }); }
-    catch (err) { console.error(err); alert('PDF generation failed: ' + err.message); }
-    finally { setPdfLoading(false); }
+    try {
+      const pdfUrl = await getBillPDFUrl({ bill, shop, customer, t, lang: language });
+      setPdfPreviewUrl(pdfUrl);
+    } catch (err) {
+      setShowPdfPreview(false);
+      console.error(err);
+      alert('PDF preview failed: ' + err.message);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    setPdfPreviewUrl('');
+    setShowPdfPreview(false);
+  };
+
+  const handleDownloadPreview = () => {
+    if (!pdfPreviewUrl || !bill) return;
+    const filename = `${bill.billNumber || 'bill'}.pdf`;
+    const a = document.createElement('a');
+    a.href = pdfPreviewUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleWhatsApp = async () => {
     if (!bill || !shop) return;
 
-    const phone    = (customer?.phone || '').replace(/\D/g, '');
+    const phone    = customer?.phone || bill.customerPhone || '';
     const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
     const filename = `${bill.billNumber || 'bill'}.pdf`;
     const msg =
@@ -120,9 +160,6 @@ export default function BillDetail() {
       `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')}\n` +
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
       `Thank you! 🙏\n\nPowered by NatBolt Billu`;
-    const waUrl = phone
-      ? `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 
     // Pre-flight: check file sharing support synchronously (before any await)
     // so we can decide whether to open WhatsApp URL while still in user-gesture context.
@@ -131,7 +168,7 @@ export default function BillDetail() {
       const testFile = new File([new Blob([''], { type: 'application/pdf' })], 't.pdf', { type: 'application/pdf' });
       canDoFileShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [testFile] });
     } catch (_) {}
-    if (!canDoFileShare) window.open(waUrl, '_blank');
+    if (!canDoFileShare) openWhatsApp(phone, msg);
 
     setPdfLoading(true);
     try {
@@ -178,6 +215,14 @@ export default function BillDetail() {
 
   return (
     <Layout showBack title={`${t('bill.title')} ${bill.billNumber}`}>
+      <PdfPreviewModal
+        open={showPdfPreview}
+        pdfUrl={pdfPreviewUrl}
+        loading={pdfLoading}
+        onClose={handleClosePreview}
+        onDownload={handleDownloadPreview}
+      />
+
       <div className="p-4 space-y-4 pb-40">
         {/* Status */}
         <div className={`flex items-center gap-2 p-3 rounded-xl font-semibold ${isPaid ? 'bg-green-50 text-green-700' : isVoid ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>
@@ -330,14 +375,17 @@ export default function BillDetail() {
       {!isVoid && (
         <div className="fixed bottom-14 left-0 right-0 max-w-lg mx-auto bg-white border-t p-4 space-y-2 z-10">
           <div className="flex gap-2">
-            <button className="btn-secondary flex-1 flex items-center justify-center gap-1.5 text-sm"
-              onClick={handleDownloadPDF} disabled={pdfLoading}>
-              <Download className="w-4 h-4" /> PDF
+            <button
+              className="btn-primary flex-1 flex items-center justify-center gap-1.5 text-sm"
+              onClick={handlePreviewPDF}
+              disabled={pdfLoading}
+            >
+              <Eye className="w-4 h-4" /> {pdfLoading ? '…' : t('bill.viewPdf')}
             </button>
             <button
               className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-green-500 rounded-xl py-3 active:scale-95"
               onClick={handleWhatsApp} disabled={pdfLoading}>
-              <MessageCircle className="w-4 h-4" /> WhatsApp
+              <WhatsAppIcon className="w-6 h-6" badge badgeClassName="p-1" /> WhatsApp
             </button>
           </div>
           {!isPaid && (

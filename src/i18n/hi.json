@@ -98,6 +98,7 @@
     "balanceDue": "शेष राशि",
     "collectPayment": "भुगतान लें",
     "shareBill": "बिल शेयर करें",
+    "viewPdf": "PDF देखें",
     "downloadPdf": "PDF डाउनलोड करें",
     "voidBill": "बिल रद्द करें",
     "voidConfirm": "यह बिल रद्द करें? यह पूर्ववत नहीं होगा।",

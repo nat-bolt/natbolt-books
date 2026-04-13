@@ -2,7 +2,8 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import useStore from '../store/useStore';
-import { Clock, Phone } from 'lucide-react';
+import { Clock } from 'lucide-react';
+import WhatsAppIcon from '../components/WhatsAppIcon';
 
 // ── Shown when the user's phone number has no shop registered by the admin yet
 export default function Pending() {
@@ -45,7 +46,7 @@ export default function Pending() {
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Phone className="w-4 h-4" />
+        <WhatsAppIcon className="w-6 h-6" badge badgeClassName="p-1" />
         Contact Admin on WhatsApp
       </a>
 
