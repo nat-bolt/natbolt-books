@@ -29,12 +29,6 @@ export default function BillDetail() {
   const [payPanel, setPayPanel] = useState(false);
 
   useEffect(() => {
-    return () => {
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-    };
-  }, [pdfPreviewUrl]);
-
-  useEffect(() => {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
@@ -113,10 +107,7 @@ export default function BillDetail() {
 
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
-    if (pdfPreviewUrl) {
-      URL.revokeObjectURL(pdfPreviewUrl);
-      setPdfPreviewUrl('');
-    }
+    if (pdfPreviewUrl) setPdfPreviewUrl('');
     setShowPdfPreview(true);
     setPdfLoading(true);
     try {
@@ -132,7 +123,6 @@ export default function BillDetail() {
   };
 
   const handleClosePreview = () => {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl('');
     setShowPdfPreview(false);
   };

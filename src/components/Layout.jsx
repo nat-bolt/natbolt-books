@@ -42,13 +42,8 @@ export default function Layout({ children, title, showBack = false }) {
 
   return (
     <div
-      className="flex flex-col max-w-lg mx-auto"
+      className="app-shell flex flex-col max-w-lg mx-auto w-full"
       style={{
-        // 100dvh = dynamic viewport height — shrinks when keyboard appears,
-        // doesn't include browser chrome on iOS/Android.
-        // Fallback to 100vh for browsers that don't support dvh yet.
-        height: '100dvh',
-        minHeight: '-webkit-fill-available', // iOS Safari PWA fallback
         backgroundColor: '#F5F0EB',
       }}
     >
@@ -117,7 +112,7 @@ export default function Layout({ children, title, showBack = false }) {
       <main
         className="flex-1 min-h-0 overflow-y-auto"
         style={{
-          paddingBottom: 'calc(max(env(safe-area-inset-bottom), 8px) + 80px)',
+          paddingBottom: 'calc(max(env(safe-area-inset-bottom), 4px) + 72px)',
           overscrollBehaviorY: 'contain',
           WebkitOverflowScrolling: 'touch', // momentum scrolling on older iOS
         }}
@@ -131,7 +126,7 @@ export default function Layout({ children, title, showBack = false }) {
             otherwise place the nav tabs inside the OS gesture zone. */}
       <nav
         className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex z-20"
-        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
+        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
       >
         {tabs.map(({ path, icon: Icon, labelKey }) => {
           const active = location.pathname === path;

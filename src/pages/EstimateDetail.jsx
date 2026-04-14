@@ -66,6 +66,7 @@ export default function EstimateDetail() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [convertedBillId, setConvertedBillId] = useState('');
 
   // ── Edit mode state ──────────────────────────────────────────────────────────
   const [editMode, setEditMode]     = useState(false);
@@ -75,12 +76,6 @@ export default function EstimateDetail() {
   const [catalogue, setCatalogue]   = useState([]);
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-    };
-  }, [pdfPreviewUrl]);
 
   useEffect(() => {
     if (!shop) return;
@@ -99,6 +94,22 @@ export default function EstimateDetail() {
       if (billErr || !billData) { navigate(-1); return; }
       const billMapped = mapBill(billData);
       setBill(billMapped);
+
+      if (billMapped.status === 'converted') {
+        const { data: convertedBill } = await supabase
+          .from('bills')
+          .select('id')
+          .eq('shop_id', shop.id)
+          .eq('type', 'bill')
+          .eq('converted_from_estimate', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        setConvertedBillId(convertedBill?.id || '');
+      } else {
+        setConvertedBillId('');
+      }
 
       if (billMapped.customerId) {
         const { data: custData } = await supabase
@@ -203,10 +214,7 @@ export default function EstimateDetail() {
   // ── PDF / WhatsApp ───────────────────────────────────────────────────────────
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
-    if (pdfPreviewUrl) {
-      URL.revokeObjectURL(pdfPreviewUrl);
-      setPdfPreviewUrl('');
-    }
+    if (pdfPreviewUrl) setPdfPreviewUrl('');
     setShowPdfPreview(true);
     setPdfLoading(true);
     try {
@@ -222,7 +230,6 @@ export default function EstimateDetail() {
   };
 
   const handleClosePreview = () => {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl('');
     setShowPdfPreview(false);
   };
@@ -359,8 +366,17 @@ export default function EstimateDetail() {
       <div className="p-4 space-y-4 pb-36">
 
         {isConverted && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center text-green-700 font-semibold text-sm">
-            ✓ Converted to Bill
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-green-700">
+            <div className="text-center font-semibold text-sm">✓ Converted to Bill</div>
+            {convertedBillId && (
+              <button
+                className="btn-primary w-full mt-3 flex items-center justify-center gap-2 !py-2.5 text-sm"
+                onClick={() => navigate(`/bill/${convertedBillId}`)}
+              >
+                {t('estimate.viewBill')}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
 

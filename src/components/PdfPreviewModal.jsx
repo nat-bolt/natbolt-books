@@ -12,14 +12,14 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
         className="bg-white px-4 pb-3 border-b border-gray-200"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
           <button
             className="btn-secondary !px-3 !py-2 text-sm"
             onClick={onClose}
           >
             <X className="w-4 h-4" />
+            <span className="sr-only">{t('common.close')}</span>
           </button>
-          <p className="flex-1 text-sm font-bold text-brand-dark truncate">{t('bill.viewPdf')}</p>
           <button
             className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5"
             onClick={onDownload}
@@ -29,11 +29,12 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
             {t('bill.downloadPdf')}
           </button>
         </div>
+        <p className="mt-3 text-sm font-bold text-brand-dark truncate">{t('bill.viewPdf')}</p>
       </div>
 
       <div
-        className="flex-1 bg-gray-100"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
+        className="flex-1 bg-gray-100 overflow-hidden"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
       >
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-brand-dark">
@@ -41,11 +42,19 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
             <p className="text-sm font-medium">{t('common.loading')}</p>
           </div>
         ) : pdfUrl ? (
-          <iframe
-            title={t('bill.viewPdf')}
-            src={pdfUrl}
+          <object
+            key={pdfUrl}
+            data={pdfUrl}
+            type="application/pdf"
             className="w-full h-full bg-white"
-          />
+          >
+            <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-sm text-gray-600">{t('common.error')}</p>
+              <button className="btn-primary !px-5 !py-2 text-sm" onClick={onDownload}>
+                {t('bill.downloadPdf')}
+              </button>
+            </div>
+          </object>
         ) : (
           <div className="h-full flex items-center justify-center px-6 text-center text-sm text-gray-500">
             {t('common.error')}

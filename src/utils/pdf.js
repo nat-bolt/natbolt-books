@@ -448,8 +448,8 @@ export async function downloadBillPDF(params) {
 
 // ── Convenience: object URL for in-app preview ───────────────────────────────
 export async function getBillPDFUrl(params) {
-  const blob = await getBillPDFBlob(params);
-  return URL.createObjectURL(blob);
+  const doc = await generateBillPDF(params);
+  return doc.output('datauristring');
 }
 
 // ── Convenience: blob for sharing ────────────────────────────────────────────
