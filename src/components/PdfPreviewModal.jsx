@@ -1,7 +1,14 @@
 import { Download, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDownload }) {
+export default function PdfPreviewModal({
+  open,
+  previewImageUrl,
+  loading,
+  onClose,
+  onDownload,
+  captureNode,
+}) {
   const { t } = useTranslation();
 
   if (!open) return null;
@@ -33,7 +40,7 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
       </div>
 
       <div
-        className="flex-1 bg-gray-100 overflow-hidden"
+        className="flex-1 bg-gray-100 overflow-y-auto"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
       >
         {loading ? (
@@ -41,19 +48,26 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
             <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
             <p className="text-sm font-medium">{t('common.loading')}</p>
           </div>
-        ) : pdfUrl ? (
-          <iframe
-            key={pdfUrl}
-            title={t('bill.viewPdf')}
-            src={pdfUrl}
-            className="w-full h-full bg-white"
-          />
+        ) : previewImageUrl ? (
+          <div className="px-3 py-3">
+            <img
+              src={previewImageUrl}
+              alt={t('bill.viewPdf')}
+              className="w-full h-auto rounded-2xl shadow-md border border-gray-200 bg-white"
+            />
+          </div>
         ) : (
           <div className="h-full flex items-center justify-center px-6 text-center text-sm text-gray-500">
             {t('common.error')}
           </div>
         )}
       </div>
+
+      {captureNode && (
+        <div className="fixed left-[-10000px] top-0 pointer-events-none">
+          {captureNode}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, AlertCircle, Camera, Eye } from 'lucide-react';
@@ -6,9 +6,11 @@ import QRCode from 'qrcode';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
+import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
 import WhatsAppIcon from '../components/WhatsAppIcon';
-import { getBillPDFBlob, getBillPDFUrl } from '../utils/pdf';
+import { getBillPDFBlob } from '../utils/pdf';
+import { generateBillPreviewImage } from '../utils/billPreview';
 import { openWhatsApp } from '../utils/whatsapp';
 
 export default function BillDetail() {
@@ -23,16 +25,11 @@ export default function BillDetail() {
   const [loading, setLoading]   = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfPreviewImage, setPdfPreviewImage] = useState('');
   const [payMode, setPayMode]   = useState('cash');
   const [paidAmt, setPaidAmt]   = useState('');
   const [payPanel, setPayPanel] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
-    };
-  }, [pdfPreviewUrl]);
+  const previewRef = useRef(null);
 
   useEffect(() => {
     if (!shop) return;
@@ -113,13 +110,12 @@ export default function BillDetail() {
 
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
-    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
-    if (pdfPreviewUrl) setPdfPreviewUrl('');
+    if (pdfPreviewImage) setPdfPreviewImage('');
     setShowPdfPreview(true);
     setPdfLoading(true);
     try {
-      const pdfUrl = await getBillPDFUrl({ bill, shop, customer, t, lang: language });
-      setPdfPreviewUrl(pdfUrl);
+      const previewImage = await generateBillPreviewImage(previewRef.current);
+      setPdfPreviewImage(previewImage);
     } catch (err) {
       setShowPdfPreview(false);
       console.error(err);
@@ -130,20 +126,30 @@ export default function BillDetail() {
   };
 
   const handleClosePreview = () => {
-    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
-    setPdfPreviewUrl('');
+    setPdfPreviewImage('');
     setShowPdfPreview(false);
   };
 
-  const handleDownloadPreview = () => {
-    if (!pdfPreviewUrl || !bill) return;
+  const handleDownloadPreview = async () => {
+    if (!bill || !shop) return;
     const filename = `${bill.billNumber || 'bill'}.pdf`;
-    const a = document.createElement('a');
-    a.href = pdfPreviewUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    setPdfLoading(true);
+    try {
+      const blob = await getBillPDFBlob({ bill, shop, customer, t, lang: language });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error(err);
+      alert('PDF download failed: ' + err.message);
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const handleWhatsApp = async () => {
@@ -215,10 +221,21 @@ export default function BillDetail() {
     <Layout showBack title={`${t('bill.title')} ${bill.billNumber}`}>
       <PdfPreviewModal
         open={showPdfPreview}
-        pdfUrl={pdfPreviewUrl}
+        previewImageUrl={pdfPreviewImage}
         loading={pdfLoading}
         onClose={handleClosePreview}
         onDownload={handleDownloadPreview}
+        captureNode={bill && shop ? (
+          <div ref={previewRef}>
+            <BillPreviewSheet
+              bill={bill}
+              shop={shop}
+              customer={customer}
+              t={t}
+              lang={language}
+            />
+          </div>
+        ) : null}
       />
 
       <div className="p-4 space-y-4 pb-40">
