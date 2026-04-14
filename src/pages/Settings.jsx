@@ -10,6 +10,7 @@ import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import i18n from '../i18n/index';
 import { UNIQUE_CITIES } from '../data/cities';
+import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../utils/shopAddress';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English' },
@@ -59,12 +60,14 @@ export default function Settings() {
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
 
+  const [initialAddressLine1, initialAddressLine2] = splitAddressForForm(shop?.address || '');
   const [form, setForm] = useState({
     shopName:  shop?.shopName  || '',
     ownerName: shop?.ownerName || '',
     gstNumber: shop?.gstNumber || '',
     upiId:     shop?.upiId     || '',
-    address:   shop?.address   || '',
+    addressLine1: initialAddressLine1,
+    addressLine2: initialAddressLine2,
     city:      shop?.city      || '',
     pincode:   shop?.pincode   || '',
     mapsUrl:   shop?.mapsUrl   || '',
@@ -111,6 +114,7 @@ export default function Settings() {
     setSaving(true);
     setError('');
     try {
+      const address = joinAddressLines(form.addressLine1, form.addressLine2);
       const { error: err } = await supabase
         .from('shops')
         .update({
@@ -118,7 +122,7 @@ export default function Settings() {
           owner_name: form.ownerName.trim() || null,
           gst_number: form.gstNumber.trim() || null,
           upi_id:     form.upiId.trim()     || null,
-          address:    form.address.trim()   || null,
+          address:    address || null,
           city:       form.city.trim()      || null,
           pincode:    form.pincode.trim()   || null,
           maps_url:   form.mapsUrl.trim()   || null,
@@ -129,7 +133,11 @@ export default function Settings() {
       if (err) throw err;
       setShop({
         ...shop,
-        ...form,
+        shopName: form.shopName,
+        ownerName: form.ownerName,
+        gstNumber: form.gstNumber,
+        upiId: form.upiId,
+        address,
         city: form.city.trim() || null,
         pincode: form.pincode.trim() || null,
         mapsUrl: form.mapsUrl.trim() || null,
@@ -404,8 +412,30 @@ export default function Settings() {
             <input className="input-field" value={form.gstNumber} onChange={set('gstNumber')} />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">{t('settings.address')}</label>
-            <textarea className="input-field" rows={2} value={form.address} onChange={set('address')} />
+            <label className="text-xs text-gray-500 mb-1 block">{t('settings.addressLine1')}</label>
+            <input
+              className="input-field"
+              maxLength={ADDRESS_LINE_LIMIT}
+              placeholder={t('settings.addressLinePlaceholder', { count: 1 })}
+              value={form.addressLine1}
+              onChange={set('addressLine1')}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {form.addressLine1.length}/{ADDRESS_LINE_LIMIT}
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">{t('settings.addressLine2')}</label>
+            <input
+              className="input-field"
+              maxLength={ADDRESS_LINE_LIMIT}
+              placeholder={t('settings.addressLinePlaceholder', { count: 2 })}
+              value={form.addressLine2}
+              onChange={set('addressLine2')}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {form.addressLine2.length}/{ADDRESS_LINE_LIMIT}
+            </p>
           </div>
 
           {/* City */}

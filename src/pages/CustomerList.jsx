@@ -6,6 +6,7 @@ import { supabase, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
+import { importCustomerIntoShop, searchSharedDirectory } from '../utils/customerDirectory';
 
 // ── Upgrade wall (shown when free user tries to access customer list) ────────
 function UpgradeWall({ onUpgrade }) {
@@ -79,6 +80,25 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
     setSaving(true);
     setError('');
     try {
+      const vehicleNoClean = vNo.trim().toUpperCase();
+      const sharedMatches = await searchSharedDirectory({
+        shopId: shop.id,
+        query: vehicleNoClean || phone.trim(),
+      });
+      const exactMatch = sharedMatches.find((entry) =>
+        entry.customer.phone === phone.trim() ||
+        (vehicleNoClean && entry.vehicle?.vehicleNo === vehicleNoClean)
+      );
+      if (exactMatch) {
+        if (exactMatch.isLocal) {
+          onSaved(exactMatch.customer, exactMatch.vehicle || null);
+          return;
+        }
+        const imported = await importCustomerIntoShop({ shopId: shop.id, entry: exactMatch });
+        onSaved(imported.customer, imported.vehicle || null);
+        return;
+      }
+
       // 1. Create customer
       const { data: cust, error: custErr } = await supabase
         .from('customers')
@@ -89,7 +109,6 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
 
       // 2. Create vehicle if at least a vehicle number is provided
       let vehicle = null;
-      const vehicleNoClean = vNo.trim().toUpperCase();
       if (vehicleNoClean) {
         const { data: veh, error: vehErr } = await supabase
           .from('vehicles')

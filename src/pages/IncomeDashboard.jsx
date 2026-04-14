@@ -126,7 +126,7 @@ export default function IncomeDashboard() {
 
       const { data, error: err } = await supabase
         .from('bills')
-        .select('*')
+        .select('id, grand_total, status, payment_mode, paid_amount, items, created_at')
         .eq('shop_id', shop.id)
         .eq('type', 'bill')
         .neq('status', 'void')

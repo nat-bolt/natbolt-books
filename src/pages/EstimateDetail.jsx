@@ -7,6 +7,7 @@ import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
+import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
 import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
@@ -69,6 +70,7 @@ export default function EstimateDetail() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewImage, setPdfPreviewImage] = useState('');
   const [previewAssets, setPreviewAssets] = useState({});
+  const [showWhatsAppReturnPrompt, setShowWhatsAppReturnPrompt] = useState(false);
   const [convertedBillId, setConvertedBillId] = useState('');
 
   // ── Edit mode state ──────────────────────────────────────────────────────────
@@ -80,6 +82,9 @@ export default function EstimateDetail() {
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const previewRef = useRef(null);
+  const previewAssetsRef = useRef({});
+  const awaitingWhatsAppReturnRef = useRef(false);
+  const whatsappBackgroundedRef = useRef(false);
 
   useEffect(() => {
     if (!shop) return;
@@ -87,21 +92,62 @@ export default function EstimateDetail() {
   }, [id, shop]);
 
   useEffect(() => {
-    let cancelled = false;
+    previewAssetsRef.current = {};
+    setPreviewAssets({});
+  }, [bill?.id, bill?.updatedAt, shop?.id, shop?.updatedAt]);
 
-    if (!bill || !shop) {
-      setPreviewAssets({});
-      return;
-    }
-
-    resolveBillPreviewAssets({ bill, shop }).then((assets) => {
-      if (!cancelled) setPreviewAssets(assets);
-    });
-
-    return () => {
-      cancelled = true;
+  useEffect(() => {
+    const maybeShowPrompt = () => {
+      if (awaitingWhatsAppReturnRef.current && whatsappBackgroundedRef.current) {
+        awaitingWhatsAppReturnRef.current = false;
+        whatsappBackgroundedRef.current = false;
+        setShowWhatsAppReturnPrompt(true);
+      }
     };
-  }, [bill, shop]);
+
+    const handleVisibilityChange = () => {
+      if (!awaitingWhatsAppReturnRef.current) return;
+      if (document.visibilityState === 'hidden') {
+        whatsappBackgroundedRef.current = true;
+      } else if (document.visibilityState === 'visible') {
+        maybeShowPrompt();
+      }
+    };
+
+    window.addEventListener('focus', maybeShowPrompt);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', maybeShowPrompt);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  const waitForPreviewRender = () =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  const ensurePreviewAssets = async () => {
+    if (!bill || !shop) return {};
+    const cached = previewAssetsRef.current;
+    if (cached.shopPhotoUrl || cached.jobPhotoUrl || cached.qrCodeUrl) return cached;
+
+    const assets = await resolveBillPreviewAssets({ bill, shop });
+    previewAssetsRef.current = assets;
+    setPreviewAssets(assets);
+    await waitForPreviewRender();
+    return assets;
+  };
+
+  const buildPdfParams = (assets = {}) => ({
+    bill: { ...bill, jobPhotoUrl: assets.jobPhotoUrl || bill.jobPhotoUrl },
+    shop: {
+      ...shop,
+      shopPhotoUrl: assets.shopPhotoUrl || shop.shopPhotoUrl,
+      qrCodeUrl: assets.qrCodeUrl || shop.qrCodeUrl,
+    },
+    customer,
+    t,
+    lang: language,
+  });
 
   const loadBill = async () => {
     try {
@@ -239,6 +285,7 @@ export default function EstimateDetail() {
     setShowPdfPreview(true);
     setPdfLoading(true);
     try {
+      await ensurePreviewAssets();
       const previewImage = await generateBillPreviewImage(previewRef.current);
       setPdfPreviewImage(previewImage);
     } catch (err) {
@@ -260,7 +307,8 @@ export default function EstimateDetail() {
     const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
     setPdfLoading(true);
     try {
-      const blob = await getBillPDFBlob({ bill, shop, customer, t, lang: language });
+      const assets = await ensurePreviewAssets();
+      const blob = await getBillPDFBlob(buildPdfParams(assets));
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -277,12 +325,49 @@ export default function EstimateDetail() {
     }
   };
 
-  const handleWhatsApp = async () => {
+  const handleSharePdfAfterWhatsApp = async () => {
+    if (!bill || !shop) return;
+    const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
+    setPdfLoading(true);
+    try {
+      const assets = await ensurePreviewAssets();
+      const blob = await getBillPDFBlob(buildPdfParams(assets));
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      let canShareFile = false;
+      try {
+        canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+      } catch (_) {}
+
+      if (canShareFile && typeof navigator.share === 'function') {
+        await navigator.share({ files: [file] });
+      } else {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }
+
+      setShowWhatsAppReturnPrompt(false);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error(err);
+        alert('PDF share failed. Please try again.');
+      }
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleWhatsApp = () => {
     if (!bill || !shop) return;
 
     const phone    = customer?.phone || bill.customerPhone || '';
     const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
-    const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
     const msg =
       `Hi ${customer?.name || 'Customer'},\n` +
       `Your estimate *${bill.estimateNumber}* from *${shop.shopName}* is ready.\n` +
@@ -290,37 +375,15 @@ export default function EstimateDetail() {
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
       `Thank you! 🙏\n\nPowered by NatBolt Billu`;
 
-    // Pre-flight: check file-sharing support synchronously (before any await)
-    // so we can call window.open while still in the user-gesture context.
-    let canDoFileShare = false;
-    try {
-      const testFile = new File([new Blob([''], { type: 'application/pdf' })], 't.pdf', { type: 'application/pdf' });
-      canDoFileShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [testFile] });
-    } catch (_) {}
-    if (!canDoFileShare) openWhatsApp(phone, msg);
-
-    setPdfLoading(true);
-    try {
-      const blob = await getBillPDFBlob({ bill, shop, customer, t, lang: language });
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      if (canDoFileShare) {
-        // ✅ Mobile (Android/iOS): native share sheet — user picks WhatsApp → PDF attached
-        await navigator.share({ files: [file], text: msg });
-      } else {
-        // Desktop: WhatsApp already opened above. Download PDF so user can attach manually.
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl; a.download = filename;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }
-    } catch (err) {
-      if (err?.name !== 'AbortError') { console.error(err); alert('PDF generation failed. Please try again.'); }
-    } finally {
-      setPdfLoading(false);
+    if (!phone) {
+      alert('Customer phone number is missing.');
+      return;
     }
+
+    awaitingWhatsAppReturnRef.current = true;
+    whatsappBackgroundedRef.current = false;
+    setShowWhatsAppReturnPrompt(false);
+    openWhatsApp(phone, msg);
   };
 
   // ── Convert to bill ──────────────────────────────────────────────────────────
@@ -346,6 +409,7 @@ export default function EstimateDetail() {
           vehicle_type:          bill.vehicleType,
           vehicle_brand:         bill.vehicleBrand,
           vehicle_model:         bill.vehicleModel,
+          odo_reading:           bill.odoReading ? Number.parseInt(bill.odoReading, 10) : null,
           items:                 bill.items,
           parts_subtotal:        bill.partsSubtotal,
           labour_charge:         bill.labourCharge,
@@ -353,6 +417,7 @@ export default function EstimateDetail() {
           cgst:                  bill.cgst,
           sgst:                  bill.sgst,
           grand_total:           bill.grandTotal,
+          job_photo_url:         bill.jobPhotoUrl,
           converted_from_estimate: id,
         })
         .select()
@@ -393,6 +458,12 @@ export default function EstimateDetail() {
         loading={pdfLoading}
         onClose={handleClosePreview}
         onDownload={handleDownloadPreview}
+      />
+      <WhatsAppReturnPrompt
+        open={showWhatsAppReturnPrompt}
+        loading={pdfLoading}
+        onAction={handleSharePdfAfterWhatsApp}
+        onClose={() => setShowWhatsAppReturnPrompt(false)}
       />
 
       {bill && shop && (
@@ -460,6 +531,10 @@ export default function EstimateDetail() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">{t('vehicle.brand')}</span>
               <span className="font-medium">{bill.vehicleBrand} {bill.vehicleModel}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">{t('vehicle.odoReading')}</span>
+              <span className="font-medium">{bill.odoReading ? `${bill.odoReading} ${t('vehicle.odoUnit')}` : '-'}</span>
             </div>
           </div>
         </div>

@@ -1,3 +1,27 @@
+import { getAddressLines } from '../utils/shopAddress';
+import {
+  ADDRESS_TEXT_PT,
+  BADGE_HEIGHT_MM,
+  BADGE_TEXT_PT,
+  BODY_TEXT_PT,
+  GRAND_TOTAL_TEXT_PT,
+  HEADER_HEIGHT_MM,
+  HEADER_PHOTO_MM,
+  HEADER_TEXT_PT,
+  META_GAP_MM,
+  META_LABEL_W_MM,
+  META_PHOTO_H_MM,
+  META_PHOTO_W_MM,
+  PAGE_MARGIN_MM,
+  PAGE_WIDTH_MM,
+  QR_SIZE_MM,
+  SHOP_NAME_PT,
+  TABLE_COLS_MM,
+  TOTAL_TEXT_PT,
+  mm,
+  pt,
+} from '../utils/billLayout';
+
 function fmtCurrency(n) {
   return `₹${Number(n || 0).toFixed(2)}`;
 }
@@ -6,6 +30,8 @@ function fmtDate(ts) {
   const d = ts?.toDate ? ts.toDate() : new Date(ts || Date.now());
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+const SECTION_GAP_MM = 4;
 
 export default function BillPreviewSheet({ bill, shop, customer, t, lang, previewAssets = {} }) {
   const isEstimate = bill.type === 'estimate';
@@ -21,7 +47,6 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang, previe
   const docLabel = isEstimate
     ? `${t('pdf.estimate')} - ${t('pdf.notTaxInvoice')}`
     : bill.isGST ? t('pdf.taxInvoice') : t('pdf.serviceBill');
-
   const metaRows = [
     [isEstimate ? t('pdf.estimateNo') : t('pdf.billNo'), bill.billNumber || bill.estimateNumber || '-'],
     [t('pdf.date'), fmtDate(bill.createdAt)],
@@ -29,138 +54,248 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang, previe
     [t('pdf.phone'), customer?.phone || bill.customerPhone || '-'],
     [t('pdf.vehicleNo'), bill.vehicleNo || '-'],
     [t('pdf.vehicleType'), `${bill.vehicleBrand || ''} ${bill.vehicleModel || ''}`.trim() || '-'],
+    [t('pdf.odoReading'), bill.odoReading ? `${bill.odoReading} ${t('vehicle.odoUnit')}` : '-'],
   ];
 
+  const jobPhotoSrc = previewAssets.jobPhotoUrl || bill.jobPhotoUrl;
+  const shopPhotoSrc = previewAssets.shopPhotoUrl || shop?.shopPhotoUrl;
+  const qrCodeSrc = previewAssets.qrCodeUrl || shop?.qrCodeUrl;
+  const logoSrc = '/icons/logo.png';
+  const addressLines = getAddressLines(shop?.address || '');
+
   return (
-    <div className="w-[420px] bg-[#f5f5f5] p-4">
-      <div className="overflow-hidden rounded-[24px] bg-white shadow-lg border border-gray-200">
-        <div className="bg-brand-dark px-4 py-4 text-white">
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-xl font-bold leading-tight truncate">{shop?.shopName || 'Shop Name'}</p>
-              {shop?.gstNumber && bill.isGST && (
-                <p className="mt-1 text-[11px] opacity-90">GST: {shop.gstNumber}</p>
-              )}
-              {shop?.address && (
-                <p className="mt-1 text-[11px] leading-relaxed opacity-90 break-words">{shop.address}</p>
-              )}
-              {shop?.phone && (
-                <p className="mt-1 text-[11px] opacity-90">Ph: {shop.phone}</p>
-              )}
+    <div style={{ width: mm(PAGE_WIDTH_MM), background: '#ffffff', color: '#111827' }}>
+      <div style={{ border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <div
+          style={{
+            minHeight: mm(HEADER_HEIGHT_MM),
+            background: '#0b0b0b',
+            color: '#ffffff',
+            padding: `${mm(2.2)} ${mm(PAGE_MARGIN_MM)}`,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: mm(3),
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: pt(SHOP_NAME_PT), fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word' }}>
+              {shop?.shopName || 'Shop Name'}
             </div>
-            {(previewAssets.shopPhotoUrl || shop?.shopPhotoUrl) && (
-              <img
-                src={previewAssets.shopPhotoUrl || shop.shopPhotoUrl}
-                alt="Shop"
-                className="w-16 h-16 rounded-2xl object-cover border border-white/20 bg-white/10"
-              />
+            {shop?.gstNumber && bill.isGST && (
+              <div style={{ marginTop: mm(1.6), fontSize: pt(HEADER_TEXT_PT), opacity: 0.9 }}>GST: {shop.gstNumber}</div>
+            )}
+            {addressLines.length > 0 && (
+              <div style={{ marginTop: mm(1.2), fontSize: pt(ADDRESS_TEXT_PT), lineHeight: 1.35, opacity: 0.9 }}>
+                {addressLines.map((line, index) => (
+                  <div key={`${line}-${index}`}>{line}</div>
+                ))}
+              </div>
+            )}
+            {shop?.phone && (
+              <div style={{ marginTop: mm(1.2), fontSize: pt(HEADER_TEXT_PT), opacity: 0.9 }}>Ph: {shop.phone}</div>
             )}
           </div>
+          {shopPhotoSrc && (
+            <img
+              src={shopPhotoSrc}
+              alt="Shop"
+              style={{
+                width: mm(HEADER_PHOTO_MM),
+                height: mm(HEADER_PHOTO_MM),
+                objectFit: 'cover',
+                borderRadius: mm(4),
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.1)',
+                flexShrink: 0,
+              }}
+            />
+          )}
         </div>
 
-        <div className="bg-accent px-4 py-2 text-center text-xs font-bold tracking-wide text-white uppercase">
+        <div
+          style={{
+            height: mm(BADGE_HEIGHT_MM),
+            background: '#f06022',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: pt(BADGE_TEXT_PT),
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
           {docLabel}
         </div>
 
-        <div className="p-4 space-y-4">
-          <div className={`gap-4 ${(previewAssets.jobPhotoUrl || bill.jobPhotoUrl) ? 'flex items-start' : 'block'}`}>
-            {(previewAssets.jobPhotoUrl || bill.jobPhotoUrl) && (
-              <img
-                src={previewAssets.jobPhotoUrl || bill.jobPhotoUrl}
-                alt="Job"
-                className="w-28 h-24 rounded-2xl object-cover border border-gray-200 bg-gray-100 shrink-0"
-              />
+        <div style={{ padding: `${mm(5)} ${mm(PAGE_MARGIN_MM)}`, display: 'grid', gap: mm(SECTION_GAP_MM) }}>
+          <div style={{ display: 'flex', gap: mm(META_GAP_MM), alignItems: 'flex-start' }}>
+            {jobPhotoSrc && (
+              <div
+                style={{
+                  width: mm(META_PHOTO_W_MM),
+                  height: mm(META_PHOTO_H_MM),
+                  border: '1px solid #e5e7eb',
+                  background: '#f3f4f6',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={jobPhotoSrc}
+                  alt="Job"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
             )}
 
-            <div className="flex-1 grid grid-cols-1 gap-2 text-[12px]">
+            <div style={{ flex: 1, display: 'grid', gap: mm(2.6), fontSize: pt(BODY_TEXT_PT) }}>
               {metaRows.map(([label, value]) => (
-                <div key={label} className="flex items-start gap-2">
-                  <span className="w-24 shrink-0 font-semibold text-gray-700">{label}:</span>
-                  <span className="text-gray-900 break-words">{String(value)}</span>
+                <div key={label} style={{ display: 'flex', alignItems: 'flex-start', gap: mm(2) }}>
+                  <span style={{ width: mm(META_LABEL_W_MM), flexShrink: 0, fontWeight: 700, color: '#374151' }}>
+                    {label}:
+                  </span>
+                  <span style={{ color: '#111827', wordBreak: 'break-word' }}>{String(value)}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-gray-200">
-            <div className="grid grid-cols-[1fr_3.4fr_1fr_1.4fr_1.6fr] bg-brand-dark px-3 py-2 text-[11px] font-bold text-white">
-              <span className="text-right">{t('pdf.srNo')}</span>
-              <span className="pl-3">{t('pdf.description')}</span>
-              <span className="text-right">{t('pdf.qty')}</span>
-              <span className="text-right">{t('pdf.rate')}</span>
-              <span className="text-right">{t('pdf.amount')}</span>
+          <div style={{ border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: TABLE_COLS_MM.map(mm).join(' '),
+                background: '#0b0b0b',
+                color: '#ffffff',
+                fontSize: pt(BODY_TEXT_PT),
+                fontWeight: 700,
+                padding: `${mm(2)} 0`,
+              }}
+            >
+              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.srNo')}</div>
+              <div style={{ paddingLeft: mm(2) }}>{t('pdf.description')}</div>
+              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.qty')}</div>
+              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.rate')}</div>
+              <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{t('pdf.amount')}</div>
             </div>
 
-            <div className="divide-y divide-gray-200">
-              {items.map((item, index) => {
-                const partName =
-                  (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) ||
-                  item.name ||
-                  '';
+            {items.map((item, index) => {
+              const partName =
+                (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) ||
+                item.name ||
+                '';
+              const bg = index % 2 === 0 ? '#ffffff' : '#e5e7eb';
 
-                return (
-                  <div
-                    key={`${partName}-${index}`}
-                    className="grid grid-cols-[1fr_3.4fr_1fr_1.4fr_1.6fr] px-3 py-2 text-[11px] text-gray-800"
-                  >
-                    <span className="text-right">{index + 1}</span>
-                    <span className="pl-3 pr-2 break-words">{partName}</span>
-                    <span className="text-right">{item.qty || 1}</span>
-                    <span className="text-right">{fmtCurrency(item.unitPrice)}</span>
-                    <span className="text-right font-medium">{fmtCurrency(item.total)}</span>
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <div
+                  key={`${partName}-${index}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: TABLE_COLS_MM.map(mm).join(' '),
+                    background: bg,
+                    color: '#111827',
+                    fontSize: pt(BODY_TEXT_PT),
+                    padding: `${mm(1.8)} 0`,
+                    borderTop: index === 0 ? 'none' : '1px solid #e5e7eb',
+                  }}
+                >
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{index + 1}</div>
+                  <div style={{ paddingLeft: mm(2), paddingRight: mm(2), wordBreak: 'break-word' }}>{partName}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{item.qty || 1}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{fmtCurrency(item.unitPrice)}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{fmtCurrency(item.total)}</div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="rounded-2xl bg-brand-light p-4 text-[12px] space-y-2">
-            <div className="flex justify-between gap-4">
-              <span className="font-semibold text-brand-mid">{t('pdf.partsSubtotal')}</span>
-              <span className="font-semibold text-brand-mid">{fmtCurrency(partsSubtotal)}</span>
+          <div style={{ background: '#FFF0E8', padding: mm(4), display: 'grid', gap: mm(2.5) }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
+              <span>{t('pdf.partsSubtotal')}</span>
+              <span>{fmtCurrency(partsSubtotal)}</span>
             </div>
-            <div className="flex justify-between gap-4">
-              <span className="font-semibold text-brand-mid">{t('pdf.labourCharges')}</span>
-              <span className="font-semibold text-brand-mid">{fmtCurrency(labourCharge)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
+              <span>{t('pdf.labourCharges')}</span>
+              <span>{fmtCurrency(labourCharge)}</span>
             </div>
             {bill.isGST && (
               <>
-                <div className="flex justify-between gap-4 text-gray-600">
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
                   <span>{t('pdf.cgst')}</span>
                   <span>{fmtCurrency(cgst)}</span>
                 </div>
-                <div className="flex justify-between gap-4 text-gray-600">
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
                   <span>{t('pdf.sgst')}</span>
                   <span>{fmtCurrency(sgst)}</span>
                 </div>
               </>
             )}
-            <div className="flex justify-between gap-4 rounded-xl bg-brand-dark px-3 py-2 text-white">
-              <span className="font-bold">{t('pdf.grandTotal')}</span>
-              <span className="font-bold">{fmtCurrency(grandTotal)}</span>
+            <div
+              style={{
+                background: '#0b0b0b',
+                color: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: mm(4),
+                padding: `${mm(3)} ${mm(4)}`,
+                fontSize: pt(GRAND_TOTAL_TEXT_PT),
+                fontWeight: 700,
+              }}
+            >
+              <span>{t('pdf.grandTotal')}</span>
+              <span>{fmtCurrency(grandTotal)}</span>
             </div>
           </div>
 
-          {!isEstimate && ((previewAssets.qrCodeUrl || shop?.qrCodeUrl) || shop?.upiId) && (
-            <div className="rounded-2xl border border-gray-200 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-mid">{t('pdf.payVia')}</p>
+          {!isEstimate && (qrCodeSrc || shop?.upiId) && (
+            <div style={{ border: '1px solid #e5e7eb', padding: mm(4) }}>
+              <div style={{ fontSize: pt(BODY_TEXT_PT), fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#f06022' }}>
+                {t('pdf.payVia')}
+              </div>
               {shop?.upiId && (
-                <p className="mt-2 text-[12px] text-gray-700 break-all">UPI: {shop.upiId}</p>
+                <div style={{ marginTop: mm(2), fontSize: pt(BODY_TEXT_PT), color: '#374151', wordBreak: 'break-all' }}>
+                  UPI: {shop.upiId}
+                </div>
               )}
-              {(previewAssets.qrCodeUrl || shop?.qrCodeUrl) && (
+              {qrCodeSrc && (
                 <img
-                  src={previewAssets.qrCodeUrl || shop.qrCodeUrl}
+                  src={qrCodeSrc}
                   alt="Payment QR"
-                  className="mt-3 w-28 h-28 rounded-2xl border border-gray-200 bg-white"
+                  style={{
+                    width: mm(QR_SIZE_MM),
+                    height: mm(QR_SIZE_MM),
+                    marginTop: mm(3),
+                    border: '1px solid #e5e7eb',
+                    background: '#ffffff',
+                  }}
                 />
               )}
             </div>
           )}
         </div>
 
-        <div className="border-t border-gray-200 px-4 py-4 text-center">
-          <p className="text-[11px] text-gray-500">{t('pdf.thankYou')}</p>
-          <p className="mt-2 text-[11px] font-semibold text-gray-700">{t('pdf.poweredBy')}</p>
+        <div
+          style={{
+            borderTop: '1px solid #e5e7eb',
+            padding: mm(4),
+            display: 'grid',
+            justifyItems: 'center',
+            rowGap: mm(2),
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: pt(7), color: '#6b7280' }}>{t('pdf.thankYou')}</div>
+          <img
+            src={logoSrc}
+            alt="NatBolt"
+            style={{ width: mm(10), height: mm(10), display: 'block', objectFit: 'contain' }}
+          />
+          <div style={{ fontSize: pt(7), fontWeight: 700, color: '#374151' }}>
+            {t('pdf.poweredBy')}
+          </div>
         </div>
       </div>
     </div>

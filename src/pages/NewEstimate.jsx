@@ -7,6 +7,8 @@ import { supabase, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
+import { importCustomerIntoShop, searchSharedDirectory } from '../utils/customerDirectory';
+import { optimizeJobPhoto } from '../utils/jobPhoto';
 
 // ── Upgrade wall (shown when free user tries to create an estimate) ──────────
 function UpgradeWall({ onUpgrade }) {
@@ -60,6 +62,7 @@ function CustomerModal({ onSelect, onClose }) {
   const [results, setResults] = useState([]);
   const [mode, setMode]       = useState('search'); // 'search' | 'create'
   const [loading, setLoading] = useState(false);
+  const [importingId, setImportingId] = useState('');
   const [createError, setCreateError] = useState('');
 
   // Create tab — customer fields
@@ -82,18 +85,28 @@ function CustomerModal({ onSelect, onClose }) {
     if (val.length < 3) { setResults([]); return; }
     setLoading(true);
     try {
-      // Sanitize before interpolating into the PostgREST filter string.
-      // Strips characters that have special meaning in PostgREST filter syntax
-      // (parentheses = grouping, comma = condition separator, backslash = escape).
-      const safe = val.replace(/[(),\\]/g, '');
-      const { data } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('shop_id', shop.id)
-        .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
-      setResults((data || []).map(mapCustomer));
+      const data = await searchSharedDirectory({ shopId: shop.id, query: val });
+      setResults(data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  };
+
+  const selectSearchResult = async (entry) => {
+    const resultId = `${entry.customer.id}:${entry.vehicle?.id || 'none'}`;
+    setImportingId(resultId);
+    try {
+      if (entry.isLocal) {
+        onSelect(entry.customer, entry.vehicle || null);
+        return;
+      }
+      const imported = await importCustomerIntoShop({ shopId: shop.id, entry });
+      onSelect(imported.customer, imported.vehicle || null);
+    } catch (err) {
+      console.error('selectSearchResult error:', err);
+      setCreateError(err.message || 'Could not import customer');
+    } finally {
+      setImportingId('');
+    }
   };
 
   const createCustomer = async () => {
@@ -102,6 +115,25 @@ function CustomerModal({ onSelect, onClose }) {
     setCreateError('');
     setLoading(true);
     try {
+      const vehicleNoClean = vNo.trim().toUpperCase();
+      const sharedMatches = await searchSharedDirectory({
+        shopId: shop.id,
+        query: vehicleNoClean || newPhone,
+      });
+      const exactMatch = sharedMatches.find((entry) =>
+        entry.customer.phone === newPhone ||
+        (vehicleNoClean && entry.vehicle?.vehicleNo === vehicleNoClean)
+      );
+      if (exactMatch) {
+        if (exactMatch.isLocal) {
+          onSelect(exactMatch.customer, exactMatch.vehicle || null);
+          return;
+        }
+        const imported = await importCustomerIntoShop({ shopId: shop.id, entry: exactMatch });
+        onSelect(imported.customer, imported.vehicle || null);
+        return;
+      }
+
       // 1. Insert customer
       const { data: cust, error: custErr } = await supabase
         .from('customers')
@@ -112,7 +144,6 @@ function CustomerModal({ onSelect, onClose }) {
 
       // 2. Insert vehicle if reg. number provided
       let vehicle = null;
-      const vehicleNoClean = vNo.trim().toUpperCase();
       if (vehicleNoClean) {
         const resolvedBrand = vBrand === '__other__' ? '' : vBrand;
         const resolvedModel = vModel === '__other__' ? '' : vModel;
@@ -191,20 +222,42 @@ function CustomerModal({ onSelect, onClose }) {
                 autoFocus
               />
             </div>
-            {results.map((c) => (
-              <button key={c.id} className="w-full card mb-2 text-left flex items-center gap-3"
-                onClick={() => onSelect(c, null)}>
+            {results.map((entry) => {
+              const resultId = `${entry.customer.id}:${entry.vehicle?.id || 'none'}`;
+              return (
+              <button key={resultId} className="w-full card mb-2 text-left flex items-center gap-3"
+                onClick={() => selectSearchResult(entry)}
+                disabled={importingId === resultId}>
                 <div className="w-10 h-10 rounded-xl bg-brand-light flex items-center justify-center font-bold text-brand-mid">
-                  {c.name?.[0]?.toUpperCase() || '?'}
+                  {entry.customer.name?.[0]?.toUpperCase() || '?'}
                 </div>
-                <div>
-                  <p className="font-semibold text-sm">{c.name}</p>
-                  <p className="text-xs text-gray-500">{c.phone}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm truncate">{entry.customer.name}</p>
+                    {!entry.isLocal && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        Shared
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 truncate">{entry.customer.phone}</p>
+                  {entry.vehicle?.vehicleNo && (
+                    <p className="text-xs text-brand-mid mt-0.5 truncate">
+                      {entry.vehicle.vehicleNo}
+                      {[entry.vehicle.vehicleBrand, entry.vehicle.vehicleModel].filter(Boolean).length > 0
+                        ? ` • ${[entry.vehicle.vehicleBrand, entry.vehicle.vehicleModel].filter(Boolean).join(' ')}`
+                        : ''}
+                    </p>
+                  )}
                 </div>
+                {importingId === resultId && (
+                  <div className="w-4 h-4 border-2 border-brand-mid border-t-transparent rounded-full animate-spin" />
+                )}
               </button>
-            ))}
+            );})}
+            {createError && <p className="text-red-500 text-sm mt-2">{createError}</p>}
             {q.length >= 3 && results.length === 0 && !loading && (
-              <p className="text-center text-gray-400 text-sm py-4">No customers found</p>
+              <p className="text-center text-gray-400 text-sm py-4">No customers or vehicles found</p>
             )}
           </>
         ) : (
@@ -375,17 +428,24 @@ function PartsModal({ catalogue, onAdd, onClose }) {
               <input className="input-field pl-9 py-2" placeholder={t('parts.search')}
                 value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
-              {CATEGORY_LIST.map((c) => (
-                <button key={c}
-                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold ${cat === c ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'}`}
-                  onClick={() => setCat(c)}
-                >
-                  {c === 'all' ? 'All' : t(`parts.categories.${c}`, { defaultValue: c })}
-                </button>
-              ))}
+            <div className="mb-3">
+              <div className="overflow-x-auto overflow-y-hidden scrollbar-hide -mx-1 px-1 pb-3">
+                <div className="inline-flex min-w-max gap-2">
+                  {CATEGORY_LIST.map((c) => (
+                    <button key={c}
+                      className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
+                        cat === c ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'
+                      }`}
+                      onClick={() => setCat(c)}
+                    >
+                      {c === 'all' ? 'All' : t(`parts.categories.${c}`, { defaultValue: c })}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="border-b border-gray-200" />
             </div>
-            <div className="flex-1 overflow-y-auto space-y-1">
+            <div className="flex-1 overflow-y-auto pt-1 space-y-1">
               {filtered.map((p) => (
                 <button key={p.shop_part_id || p.default_part_id}
                   className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-brand-light active:bg-brand-light text-left"
@@ -468,6 +528,8 @@ export default function NewEstimate() {
   const photoInputRef = useRef(null);
   const [jobPhoto, setJobPhoto] = useState(null);           // File object
   const [jobPhotoPreview, setJobPhotoPreview] = useState(''); // base64 preview
+  const [photoPreparing, setPhotoPreparing] = useState(false);
+  const [odoReading, setOdoReading] = useState('');
 
   // Parts & totals
   const [parts, setParts]     = useState([]);
@@ -558,18 +620,31 @@ export default function NewEstimate() {
   const vehicleModels = getModelsForBrand(vehicle.brand);
 
   // Job photo handlers
-  const handlePhotoSelect = (e) => {
+  const handlePhotoSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file (PNG/JPG)');
       return;
     }
-    setJobPhoto(file);
-    setError('');
-    const reader = new FileReader();
-    reader.onload = (ev) => setJobPhotoPreview(ev.target.result);
-    reader.readAsDataURL(file);
+    setPhotoPreparing(true);
+    try {
+      const prepared = await optimizeJobPhoto(file);
+      setJobPhoto(prepared);
+      setError('');
+      const reader = new FileReader();
+      reader.onload = (ev) => setJobPhotoPreview(ev.target.result);
+      reader.readAsDataURL(prepared);
+    } catch (err) {
+      console.error('Job photo preparation failed:', err);
+      setJobPhoto(file);
+      setError('');
+      const reader = new FileReader();
+      reader.onload = (ev) => setJobPhotoPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    } finally {
+      setPhotoPreparing(false);
+    }
   };
 
   const clearPhoto = () => {
@@ -675,6 +750,7 @@ export default function NewEstimate() {
         vehicle_type:   vehicleType,
         vehicle_brand:  vehicleBrand,
         vehicle_model:  vehicleModel,
+        odo_reading:    odoReading.trim() ? Number.parseInt(odoReading.trim(), 10) : null,
         vehicle_id:     vehicleId,
         items:          parts,
         parts_subtotal: partsSubtotal,
@@ -925,6 +1001,23 @@ export default function NewEstimate() {
                     </div>
                   </div>
                 )}
+
+                <div className="border-t border-gray-100 pt-3">
+                  <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.odoReading')}</label>
+                  <div className="relative">
+                    <input
+                      className="input-field pr-12"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder={t('vehicle.odoPlaceholder')}
+                      value={odoReading}
+                      onChange={(e) => setOdoReading(e.target.value.replace(/\D/g, ''))}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                      {t('vehicle.odoUnit')}
+                    </span>
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -940,6 +1033,12 @@ export default function NewEstimate() {
             <p className="text-xs text-gray-500 -mt-2">
               Take a photo of the vehicle before starting work
             </p>
+            {photoPreparing && (
+              <div className="flex items-center gap-2 text-xs text-brand-mid">
+                <div className="w-3.5 h-3.5 border-2 border-brand-mid border-t-transparent rounded-full animate-spin" />
+                Preparing photo for faster upload...
+              </div>
+            )}
 
             {jobPhotoPreview ? (
               <div className="relative">

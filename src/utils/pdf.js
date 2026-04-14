@@ -1,4 +1,17 @@
 import { jsPDF } from 'jspdf';
+import { getAddressLines } from './shopAddress';
+import {
+  BADGE_HEIGHT_MM,
+  HEADER_HEIGHT_MM,
+  HEADER_PHOTO_MM,
+  META_GAP_MM,
+  META_LABEL_W_MM,
+  META_PHOTO_H_MM,
+  META_PHOTO_W_MM,
+  PAGE_MARGIN_MM,
+  QR_SIZE_MM,
+  TABLE_COLS_MM,
+} from './billLayout';
 // QRCode auto-generation removed — payment QR must be uploaded by shop owner
 // to ensure it's verified correct before reaching customers.
 
@@ -92,15 +105,15 @@ const fmtDate = (ts) => {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-// Brand colours
-const BRAND_DARK  = [26,  35,  126]; // #1A237E
-const BRAND_MID   = [57,  73,  171]; // #3949AB
-const BRAND_LIGHT = [232, 234, 246]; // #E8EAF6
-const ACCENT      = [245, 124,   0]; // #F57C00
+// Brand colours — aligned with preview / tailwind config
+const BRAND_DARK  = [11,  11,  11];  // #0b0b0b
+const BRAND_MID   = [240, 96,  34];  // #f06022
+const BRAND_LIGHT = [255, 240, 232]; // #FFF0E8
+const ACCENT      = [240, 96,  34];  // #f06022
 const WHITE       = [255, 255, 255];
-const GRAY        = [100, 100, 100];
-const LIGHT_GRAY  = [240, 240, 240];
-const TEXT        = [33,  33,  33];
+const GRAY        = [107, 114, 128]; // gray-500
+const LIGHT_GRAY  = [229, 231, 235]; // gray-200
+const TEXT        = [17,  24,  39];  // gray-900
 
 // ── Main PDF generator ─────────────────────────────────────────────────────────
 export async function generateBillPDF({ bill, shop, customer, t, lang }) {
@@ -111,7 +124,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   const fmt = mkFmt(F === 'DejaVuSans');       // ₹ with DejaVuSans, Rs. with Helvetica
 
   const W = doc.internal.pageSize.getWidth();  // 148mm
-  const M = 10; // margin
+  const M = PAGE_MARGIN_MM;
 
   const isEstimate    = bill.type === 'estimate';
   const isGST         = bill.isGST;
@@ -125,7 +138,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
 
   // ── Header band ──────────────────────────────────────────────────────────────
   doc.setFillColor(...BRAND_DARK);
-  doc.rect(0, 0, W, 28, 'F');
+  doc.rect(0, 0, W, HEADER_HEIGHT_MM, 'F');
 
   // Shop photo (top-right corner if available)
   let shopPhotoWidth = 0;
@@ -142,8 +155,8 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
         });
         const mime    = blob.type || '';
         const imgType = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
-        const photoSize = 24; // 24mm square
-        doc.addImage(imgData, imgType, W - M - photoSize, 2, photoSize, photoSize);
+        const photoSize = HEADER_PHOTO_MM;
+        doc.addImage(imgData, imgType, W - M - photoSize, 5, photoSize, photoSize);
         shopPhotoWidth = photoSize + 3; // reserve space for photo + gap
       }
     } catch (err) {
@@ -158,18 +171,23 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   doc.setFontSize(15);
   doc.text(shop?.shopName || 'Shop Name', M, 10);
 
+  let headerTextY = 16;
+  const addressLines = getAddressLines(shop?.address || '');
   doc.setFont(F, 'normal');
   doc.setFontSize(8);
   if (shop?.gstNumber && isGST) {
-    doc.text(`GST: ${shop.gstNumber}`, M, 16);
+    doc.text(`GST: ${shop.gstNumber}`, M, headerTextY);
+    headerTextY += 4.5;
   }
-  if (shop?.address) {
-    const maxChars = Math.floor(textMaxWidth / 1.5); // rough character limit
-    doc.text(shop.address.substring(0, maxChars), M, 21);
+  if (addressLines.length > 0) {
+    doc.setFontSize(7.5);
+    doc.text(addressLines, M, headerTextY);
+    headerTextY += addressLines.length * 3.8 + 1;
+    doc.setFontSize(8);
   }
-  doc.text(`Ph: ${shop?.phone || ''}`, M, 26);
+  doc.text(`Ph: ${shop?.phone || ''}`, M, Math.min(headerTextY, 31));
 
-  y = 32;
+  y = HEADER_HEIGHT_MM + 4;
 
   // ── Document type badge ──────────────────────────────────────────────────────
   const docLabel = isEstimate
@@ -177,7 +195,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     : isGST ? t('pdf.taxInvoice') : t('pdf.serviceBill');
 
   doc.setFillColor(...ACCENT);
-  doc.rect(0, y, W, 8, 'F');
+  doc.rect(0, y, W, BADGE_HEIGHT_MM, 'F');
   doc.setTextColor(...WHITE);
   doc.setFont(F, 'bold');
   doc.setFontSize(10);
@@ -197,20 +215,21 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     [t('pdf.phone'), customer?.phone || bill.customerPhone || '-'],
     [t('pdf.vehicleNo'), bill.vehicleNo || '-'],
     [t('pdf.vehicleType'), `${bill.vehicleBrand || ''} ${bill.vehicleModel || ''}`.trim() || '-'],
+    [t('pdf.odoReading'), bill.odoReading ? `${bill.odoReading} ${t('vehicle.odoUnit')}` : '-'],
   ];
 
   if (bill.jobPhotoUrl) {
     try {
       const { imgData, imgType, width, height } = await loadImageForPdf(bill.jobPhotoUrl, 'JPEG');
-        const photoBoxW = 42;
-        const photoBoxH = 32;
-        const photoGap = 16;
+        const photoBoxW = META_PHOTO_W_MM;
+        const photoBoxH = META_PHOTO_H_MM;
+        const photoGap = META_GAP_MM;
         const imgW = Math.min(photoBoxW, (width / height) * photoBoxH);
         const imgH = (height / width) * imgW;
         const photoX = M;
         const photoY = y;
         const textX = photoX + photoBoxW + photoGap;
-        const valueX = textX + 24;
+        const valueX = textX + META_LABEL_W_MM;
         const textWidth = W - M - textX;
         const lineGap = 5.2;
 
@@ -275,7 +294,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   }
 
   // ── Parts table ──────────────────────────────────────────────────────────────
-  const colW = [8,  51, 12, 24, 28]; // Sr, Description, Qty, Rate, Amount
+  const colW = TABLE_COLS_MM; // Sr, Description, Qty, Rate, Amount
   const colX = [M, M+11, M+62, M+74, M+98];
   const RX   = colX[4] + colW[4]; // = 136mm — single right-align reference for all money
 
@@ -396,7 +415,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
         });
         const mime    = blob.type || '';
         const imgType = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
-        doc.addImage(imgData, imgType, W - M - 28, y, 28, 28);
+        doc.addImage(imgData, imgType, W - M - QR_SIZE_MM, y, QR_SIZE_MM, QR_SIZE_MM);
         y += 30;
       } catch (qrErr) {
         // Image load failed — UPI ID text is already drawn above, skip QR image

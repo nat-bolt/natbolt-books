@@ -1,3 +1,5 @@
+const dataUrlCache = new Map();
+
 async function waitForImages(container) {
   const images = Array.from(container.querySelectorAll('img'));
   await Promise.all(images.map((img) => {
@@ -11,6 +13,10 @@ async function waitForImages(container) {
 
 async function toDataUrl(url) {
   if (!url) return '';
+  if (String(url).startsWith('data:')) return url;
+  if (dataUrlCache.has(url)) return dataUrlCache.get(url);
+
+  const promise = (async () => {
   try {
     const res = await fetch(url);
     if (!res.ok) return url;
@@ -24,6 +30,10 @@ async function toDataUrl(url) {
   } catch (_) {
     return url;
   }
+  })();
+
+  dataUrlCache.set(url, promise);
+  return promise;
 }
 
 async function waitForPaint() {

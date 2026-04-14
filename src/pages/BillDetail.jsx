@@ -8,6 +8,7 @@ import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
+import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
 import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
@@ -27,10 +28,14 @@ export default function BillDetail() {
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewImage, setPdfPreviewImage] = useState('');
   const [previewAssets, setPreviewAssets] = useState({});
+  const [showWhatsAppReturnPrompt, setShowWhatsAppReturnPrompt] = useState(false);
   const [payMode, setPayMode]   = useState('cash');
   const [paidAmt, setPaidAmt]   = useState('');
   const [payPanel, setPayPanel] = useState(false);
   const previewRef = useRef(null);
+  const previewAssetsRef = useRef({});
+  const awaitingWhatsAppReturnRef = useRef(false);
+  const whatsappBackgroundedRef = useRef(false);
 
   useEffect(() => {
     if (!shop) return;
@@ -38,21 +43,62 @@ export default function BillDetail() {
   }, [id, shop]);
 
   useEffect(() => {
-    let cancelled = false;
+    previewAssetsRef.current = {};
+    setPreviewAssets({});
+  }, [bill?.id, bill?.updatedAt, shop?.id, shop?.updatedAt]);
 
-    if (!bill || !shop) {
-      setPreviewAssets({});
-      return;
-    }
-
-    resolveBillPreviewAssets({ bill, shop }).then((assets) => {
-      if (!cancelled) setPreviewAssets(assets);
-    });
-
-    return () => {
-      cancelled = true;
+  useEffect(() => {
+    const maybeShowPrompt = () => {
+      if (awaitingWhatsAppReturnRef.current && whatsappBackgroundedRef.current) {
+        awaitingWhatsAppReturnRef.current = false;
+        whatsappBackgroundedRef.current = false;
+        setShowWhatsAppReturnPrompt(true);
+      }
     };
-  }, [bill, shop]);
+
+    const handleVisibilityChange = () => {
+      if (!awaitingWhatsAppReturnRef.current) return;
+      if (document.visibilityState === 'hidden') {
+        whatsappBackgroundedRef.current = true;
+      } else if (document.visibilityState === 'visible') {
+        maybeShowPrompt();
+      }
+    };
+
+    window.addEventListener('focus', maybeShowPrompt);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', maybeShowPrompt);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  const waitForPreviewRender = () =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  const ensurePreviewAssets = async () => {
+    if (!bill || !shop) return {};
+    const cached = previewAssetsRef.current;
+    if (cached.shopPhotoUrl || cached.jobPhotoUrl || cached.qrCodeUrl) return cached;
+
+    const assets = await resolveBillPreviewAssets({ bill, shop });
+    previewAssetsRef.current = assets;
+    setPreviewAssets(assets);
+    await waitForPreviewRender();
+    return assets;
+  };
+
+  const buildPdfParams = (assets = {}) => ({
+    bill: { ...bill, jobPhotoUrl: assets.jobPhotoUrl || bill.jobPhotoUrl },
+    shop: {
+      ...shop,
+      shopPhotoUrl: assets.shopPhotoUrl || shop.shopPhotoUrl,
+      qrCodeUrl: assets.qrCodeUrl || shop.qrCodeUrl,
+    },
+    customer,
+    t,
+    lang: language,
+  });
 
   const loadBill = async () => {
     try {
@@ -65,6 +111,28 @@ export default function BillDetail() {
 
       if (billErr || !billData) { navigate(-1); return; }
       const billMapped = mapBill(billData);
+
+      if (!billMapped.jobPhotoUrl && billMapped.convertedFromEstimate) {
+        const { data: estimateData } = await supabase
+          .from('bills')
+          .select('job_photo_url')
+          .eq('id', billMapped.convertedFromEstimate)
+          .eq('shop_id', shop.id)
+          .maybeSingle();
+
+        const inheritedJobPhotoUrl = estimateData?.job_photo_url || null;
+        if (inheritedJobPhotoUrl) {
+          billMapped.jobPhotoUrl = inheritedJobPhotoUrl;
+
+          // Backfill the converted bill so future loads/PDFs use the same photo directly.
+          await supabase
+            .from('bills')
+            .update({ job_photo_url: inheritedJobPhotoUrl })
+            .eq('id', billMapped.id)
+            .eq('shop_id', shop.id);
+        }
+      }
+
       setBill(billMapped);
 
       // ── Fetch customer and generate UPI QR in parallel ────────────────────
@@ -132,6 +200,7 @@ export default function BillDetail() {
     setShowPdfPreview(true);
     setPdfLoading(true);
     try {
+      await ensurePreviewAssets();
       const previewImage = await generateBillPreviewImage(previewRef.current);
       setPdfPreviewImage(previewImage);
     } catch (err) {
@@ -153,7 +222,8 @@ export default function BillDetail() {
     const filename = `${bill.billNumber || 'bill'}.pdf`;
     setPdfLoading(true);
     try {
-      const blob = await getBillPDFBlob({ bill, shop, customer, t, lang: language });
+      const assets = await ensurePreviewAssets();
+      const blob = await getBillPDFBlob(buildPdfParams(assets));
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -170,52 +240,67 @@ export default function BillDetail() {
     }
   };
 
-  const handleWhatsApp = async () => {
+  const handleSharePdfAfterWhatsApp = async () => {
+    if (!bill || !shop) return;
+    const filename = `${bill.billNumber || 'bill'}.pdf`;
+    setPdfLoading(true);
+    try {
+      const assets = await ensurePreviewAssets();
+      const blob = await getBillPDFBlob(buildPdfParams(assets));
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      let canShareFile = false;
+      try {
+        canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+      } catch (_) {}
+
+      if (canShareFile && typeof navigator.share === 'function') {
+        await navigator.share({ files: [file] });
+      } else {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }
+
+      setShowWhatsAppReturnPrompt(false);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error(err);
+        alert('PDF share failed: ' + err.message);
+      }
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleWhatsApp = () => {
     if (!bill || !shop) return;
 
     const phone    = customer?.phone || bill.customerPhone || '';
     const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
-    const filename = `${bill.billNumber || 'bill'}.pdf`;
     const msg =
       `Hi ${customer?.name || 'Customer'},\n` +
       `Your bill *${bill.billNumber}* from *${shop.shopName}* is ready.\n` +
       `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')}\n` +
+      '\n' +
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
+      '\n' +
       `Thank you! 🙏\n\nPowered by NatBolt Billu`;
 
-    // Pre-flight: check file sharing support synchronously (before any await)
-    // so we can decide whether to open WhatsApp URL while still in user-gesture context.
-    let canDoFileShare = false;
-    try {
-      const testFile = new File([new Blob([''], { type: 'application/pdf' })], 't.pdf', { type: 'application/pdf' });
-      canDoFileShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [testFile] });
-    } catch (_) {}
-    if (!canDoFileShare) openWhatsApp(phone, msg);
-
-    setPdfLoading(true);
-    try {
-      const blob = await getBillPDFBlob({ bill, shop, customer, t, lang: language });
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      if (canDoFileShare) {
-        // ✅ Mobile (Android/iOS): native share sheet opens — user picks
-        // WhatsApp and the PDF is attached directly in the chat.
-        await navigator.share({ files: [file], text: msg });
-      } else {
-        // Desktop: WhatsApp already opened with text above. Also download
-        // the PDF so the user can attach it manually in the chat.
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl; a.download = filename;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }
-    } catch (err) {
-      if (err?.name !== 'AbortError') { console.error(err); alert('PDF generation failed: ' + err.message); }
-    } finally {
-      setPdfLoading(false);
+    if (!phone) {
+      alert('Customer phone number is missing.');
+      return;
     }
+
+    awaitingWhatsAppReturnRef.current = true;
+    whatsappBackgroundedRef.current = false;
+    setShowWhatsAppReturnPrompt(false);
+    openWhatsApp(phone, msg);
   };
 
   const fmtCurrency = (n) => `₹${Number(n || 0).toFixed(2)}`;
@@ -243,6 +328,12 @@ export default function BillDetail() {
         loading={pdfLoading}
         onClose={handleClosePreview}
         onDownload={handleDownloadPreview}
+      />
+      <WhatsAppReturnPrompt
+        open={showWhatsAppReturnPrompt}
+        loading={pdfLoading}
+        onAction={handleSharePdfAfterWhatsApp}
+        onClose={() => setShowWhatsAppReturnPrompt(false)}
       />
 
       {bill && shop && (
@@ -291,6 +382,10 @@ export default function BillDetail() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Vehicle</span>
               <span className="font-medium">{bill.vehicleBrand} {bill.vehicleModel}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">{t('vehicle.odoReading')}</span>
+              <span className="font-medium">{bill.odoReading ? `${bill.odoReading} ${t('vehicle.odoUnit')}` : '-'}</span>
             </div>
           </div>
         </div>

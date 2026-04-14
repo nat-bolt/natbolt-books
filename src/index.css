@@ -95,6 +95,15 @@
   animation: fade-in-out 2s ease forwards;
 }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Hide reCAPTCHA badge ──────────────────────────────────────────────────
  * Firebase reCAPTCHA adds a global badge that persists across pages.
  * Hide it globally since we use invisible reCAPTCHA (no user interaction).
