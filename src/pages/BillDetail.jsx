@@ -29,6 +29,12 @@ export default function BillDetail() {
   const [payPanel, setPayPanel] = useState(false);
 
   useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
+
+  useEffect(() => {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
@@ -107,6 +113,7 @@ export default function BillDetail() {
 
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
+    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
     if (pdfPreviewUrl) setPdfPreviewUrl('');
     setShowPdfPreview(true);
     setPdfLoading(true);
@@ -123,6 +130,7 @@ export default function BillDetail() {
   };
 
   const handleClosePreview = () => {
+    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl('');
     setShowPdfPreview(false);
   };

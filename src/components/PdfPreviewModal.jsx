@@ -42,19 +42,12 @@ export default function PdfPreviewModal({ open, pdfUrl, loading, onClose, onDown
             <p className="text-sm font-medium">{t('common.loading')}</p>
           </div>
         ) : pdfUrl ? (
-          <object
+          <iframe
             key={pdfUrl}
-            data={pdfUrl}
-            type="application/pdf"
+            title={t('bill.viewPdf')}
+            src={pdfUrl}
             className="w-full h-full bg-white"
-          >
-            <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
-              <p className="text-sm text-gray-600">{t('common.error')}</p>
-              <button className="btn-primary !px-5 !py-2 text-sm" onClick={onDownload}>
-                {t('bill.downloadPdf')}
-              </button>
-            </div>
-          </object>
+          />
         ) : (
           <div className="h-full flex items-center justify-center px-6 text-center text-sm text-gray-500">
             {t('common.error')}

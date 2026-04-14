@@ -78,6 +78,12 @@ export default function EstimateDetail() {
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
+
+  useEffect(() => {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
@@ -214,6 +220,7 @@ export default function EstimateDetail() {
   // ── PDF / WhatsApp ───────────────────────────────────────────────────────────
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
+    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
     if (pdfPreviewUrl) setPdfPreviewUrl('');
     setShowPdfPreview(true);
     setPdfLoading(true);
@@ -230,6 +237,7 @@ export default function EstimateDetail() {
   };
 
   const handleClosePreview = () => {
+    if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl('');
     setShowPdfPreview(false);
   };
