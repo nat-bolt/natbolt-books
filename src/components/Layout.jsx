@@ -45,6 +45,9 @@ export default function Layout({ children, title, showBack = false }) {
       className="app-shell flex flex-col max-w-lg mx-auto w-full"
       style={{
         backgroundColor: '#F5F0EB',
+        '--bottom-nav-safe': 'max(env(safe-area-inset-bottom), 4px)',
+        '--bottom-nav-height': '56px',
+        '--bottom-nav-offset': 'calc(var(--bottom-nav-safe) + var(--bottom-nav-height))',
       }}
     >
       {/* Top bar
@@ -112,7 +115,7 @@ export default function Layout({ children, title, showBack = false }) {
       <main
         className="flex-1 min-h-0 overflow-y-auto"
         style={{
-          paddingBottom: 'calc(max(env(safe-area-inset-bottom), 4px) + 72px)',
+          paddingBottom: 'calc(var(--bottom-nav-offset) + 16px)',
           overscrollBehaviorY: 'contain',
           WebkitOverflowScrolling: 'touch', // momentum scrolling on older iOS
         }}
@@ -126,7 +129,7 @@ export default function Layout({ children, title, showBack = false }) {
             otherwise place the nav tabs inside the OS gesture zone. */}
       <nav
         className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex z-20"
-        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
+        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'var(--bottom-nav-safe)' }}
       >
         {tabs.map(({ path, icon: Icon, labelKey }) => {
           const active = location.pathname === path;

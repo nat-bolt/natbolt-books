@@ -11,12 +11,11 @@ export default function WhatsAppReturnPrompt({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/30 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-5 shadow-2xl"
+        className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
         <h3 className="text-base font-bold text-brand-dark">{title}</h3>
         <p className="text-sm text-gray-500 mt-1">{description}</p>
         <div className="mt-4 flex gap-3">

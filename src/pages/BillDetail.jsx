@@ -285,12 +285,12 @@ export default function BillDetail() {
     const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
     const msg =
       `Hi ${customer?.name || 'Customer'},\n` +
-      `Your bill *${bill.billNumber}* from *${shop.shopName}* is ready.\n` +
-      `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')}\n` +
+      `Your Bill:${bill.billNumber} from ${shop.shopName}\n` +
+      `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')} is ready.\n` +
       '\n' +
       `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
       '\n' +
-      `Thank you! 🙏\n\nPowered by NatBolt Billu`;
+      `Thank you! 🙏\nPowered by NatBolt Billu`;
 
     if (!phone) {
       alert('Customer phone number is missing.');
@@ -505,7 +505,10 @@ export default function BillDetail() {
 
       {/* Actions footer */}
       {!isVoid && (
-        <div className="fixed bottom-14 left-0 right-0 max-w-lg mx-auto bg-white border-t p-4 space-y-2 z-10">
+        <div
+          className="fixed left-0 right-0 max-w-lg mx-auto bg-white border-t p-4 space-y-2 z-10"
+          style={{ bottom: 'var(--bottom-nav-offset)' }}
+        >
           <div className="flex gap-2">
             <button
               className="btn-primary flex-1 flex items-center justify-center gap-1.5 text-sm"

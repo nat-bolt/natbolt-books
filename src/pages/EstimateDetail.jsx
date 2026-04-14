@@ -736,7 +736,10 @@ export default function EstimateDetail() {
 
       {/* Footer actions (only when not in edit mode) */}
       {isDraft && !editMode && (
-        <div className="fixed bottom-14 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 p-4 space-y-2 z-10">
+        <div
+          className="fixed left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 p-4 space-y-2 z-10"
+          style={{ bottom: 'var(--bottom-nav-offset)' }}
+        >
           <div className="flex gap-2">
             <button
               className="btn-primary flex-1 flex items-center justify-center gap-2"
