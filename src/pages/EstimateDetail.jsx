@@ -9,7 +9,7 @@ import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
-import { generateBillPreviewImage } from '../utils/billPreview';
+import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
 import { openWhatsApp } from '../utils/whatsapp';
 
 // ── Simple parts picker modal used in edit mode ────────────────────────────────
@@ -68,6 +68,7 @@ export default function EstimateDetail() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewImage, setPdfPreviewImage] = useState('');
+  const [previewAssets, setPreviewAssets] = useState({});
   const [convertedBillId, setConvertedBillId] = useState('');
 
   // ── Edit mode state ──────────────────────────────────────────────────────────
@@ -84,6 +85,23 @@ export default function EstimateDetail() {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!bill || !shop) {
+      setPreviewAssets({});
+      return;
+    }
+
+    resolveBillPreviewAssets({ bill, shop }).then((assets) => {
+      if (!cancelled) setPreviewAssets(assets);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bill, shop]);
 
   const loadBill = async () => {
     try {
@@ -386,6 +404,7 @@ export default function EstimateDetail() {
               customer={customer}
               t={t}
               lang={language}
+              previewAssets={previewAssets}
             />
           </div>
         </div>

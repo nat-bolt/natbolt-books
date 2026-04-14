@@ -10,7 +10,7 @@ import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
-import { generateBillPreviewImage } from '../utils/billPreview';
+import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
 import { openWhatsApp } from '../utils/whatsapp';
 
 export default function BillDetail() {
@@ -26,6 +26,7 @@ export default function BillDetail() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewImage, setPdfPreviewImage] = useState('');
+  const [previewAssets, setPreviewAssets] = useState({});
   const [payMode, setPayMode]   = useState('cash');
   const [paidAmt, setPaidAmt]   = useState('');
   const [payPanel, setPayPanel] = useState(false);
@@ -35,6 +36,23 @@ export default function BillDetail() {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!bill || !shop) {
+      setPreviewAssets({});
+      return;
+    }
+
+    resolveBillPreviewAssets({ bill, shop }).then((assets) => {
+      if (!cancelled) setPreviewAssets(assets);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bill, shop]);
 
   const loadBill = async () => {
     try {
@@ -236,6 +254,7 @@ export default function BillDetail() {
               customer={customer}
               t={t}
               lang={language}
+              previewAssets={previewAssets}
             />
           </div>
         </div>

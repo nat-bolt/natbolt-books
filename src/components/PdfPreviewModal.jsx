@@ -13,9 +13,9 @@ export default function PdfPreviewModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col min-h-0" style={{ height: 'var(--app-height, 100dvh)' }}>
       <div
-        className="bg-white px-4 pb-3 border-b border-gray-200"
+        className="bg-white px-4 pb-3 border-b border-gray-200 sticky top-0 z-10 shrink-0"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         <div className="flex items-center justify-between gap-2">
@@ -39,7 +39,7 @@ export default function PdfPreviewModal({
       </div>
 
       <div
-        className="flex-1 bg-gray-100 overflow-y-auto"
+        className="flex-1 min-h-0 bg-gray-100 overflow-y-auto"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
       >
         {loading ? (

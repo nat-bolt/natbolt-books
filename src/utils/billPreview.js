@@ -9,8 +9,35 @@ async function waitForImages(container) {
   }));
 }
 
+async function toDataUrl(url) {
+  if (!url) return '';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return url;
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (_) {
+    return url;
+  }
+}
+
 async function waitForPaint() {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+export async function resolveBillPreviewAssets({ bill, shop }) {
+  const [shopPhotoUrl, jobPhotoUrl, qrCodeUrl] = await Promise.all([
+    toDataUrl(shop?.shopPhotoUrl || ''),
+    toDataUrl(bill?.jobPhotoUrl || ''),
+    toDataUrl(shop?.qrCodeUrl || ''),
+  ]);
+
+  return { shopPhotoUrl, jobPhotoUrl, qrCodeUrl };
 }
 
 export async function generateBillPreviewImage(container) {

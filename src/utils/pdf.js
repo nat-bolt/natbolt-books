@@ -23,6 +23,47 @@ async function toBase64(url) {
   return btoa(bin);
 }
 
+async function blobToDataUrl(blob) {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function loadImageForPdf(url, outputType = 'JPEG', quality = 0.92) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Image fetch failed: ${res.status} ${url}`);
+
+  const blob = await res.blob();
+  const sourceDataUrl = await blobToDataUrl(blob);
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = sourceDataUrl;
+  });
+
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas context unavailable');
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const mime = outputType === 'PNG' ? 'image/png' : 'image/jpeg';
+  return {
+    imgData: canvas.toDataURL(mime, outputType === 'JPEG' ? quality : undefined),
+    imgType: outputType,
+    width,
+    height,
+  };
+}
+
 // Returns font family name: 'DejaVuSans' (with ₹) or 'helvetica' (fallback)
 async function loadFont(doc) {
   if (_dvFailed) return 'helvetica';
@@ -150,7 +191,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   doc.setFontSize(8);
 
   const metaEntries = [
-    [t('pdf.billNo'), bill.billNumber || bill.estimateNumber || '-'],
+    [isEstimate ? t('pdf.estimateNo') : t('pdf.billNo'), bill.billNumber || bill.estimateNumber || '-'],
     [t('pdf.date'), fmtDate(bill.createdAt)],
     [t('pdf.customerName'), customer?.name || bill.customerName || '-'],
     [t('pdf.phone'), customer?.phone || bill.customerPhone || '-'],
@@ -160,28 +201,12 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
 
   if (bill.jobPhotoUrl) {
     try {
-      const res = await fetch(bill.jobPhotoUrl);
-      if (res.ok) {
-        const blob = await res.blob();
-        const imgData = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload  = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-
-        // Add photo with max width of 60mm, maintain aspect ratio
-        const img = new Image();
-        await new Promise((resolve) => {
-          img.onload = resolve;
-          img.src = imgData;
-        });
-
+      const { imgData, imgType, width, height } = await loadImageForPdf(bill.jobPhotoUrl, 'JPEG');
         const photoBoxW = 42;
         const photoBoxH = 32;
         const photoGap = 16;
-        const imgW = Math.min(photoBoxW, (img.width / img.height) * photoBoxH);
-        const imgH = (img.height / img.width) * imgW;
+        const imgW = Math.min(photoBoxW, (width / height) * photoBoxH);
+        const imgH = (height / width) * imgW;
         const photoX = M;
         const photoY = y;
         const textX = photoX + photoBoxW + photoGap;
@@ -193,7 +218,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
         doc.rect(photoX, photoY, photoBoxW, photoBoxH);
         doc.addImage(
           imgData,
-          'JPEG',
+          imgType,
           photoX + (photoBoxW - imgW) / 2,
           photoY + (photoBoxH - imgH) / 2,
           imgW,
@@ -209,25 +234,6 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
         });
 
         y += Math.max(photoBoxH, 4 + metaEntries.length * lineGap) + 4;
-      } else {
-        const metaLeft = metaEntries.slice(0, 2);
-        const metaRight = metaEntries.slice(2);
-
-        metaLeft.forEach(([label, val], i) => {
-          doc.setFont(F, 'bold');
-          doc.text(`${label}:`, M + 2, y + i * 6);
-          doc.setFont(F, 'normal');
-          doc.text(String(val), M + 16, y + i * 6);
-        });
-        metaRight.forEach(([label, val], i) => {
-          doc.setFont(F, 'bold');
-          doc.text(`${label}:`, W / 2 + 2, y + i * 6);
-          doc.setFont(F, 'normal');
-          doc.text(String(val).substring(0, 20), W / 2 + 25, y + i * 6);
-        });
-
-        y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
-      }
     } catch (err) {
       console.warn('[PDF] Job photo fetch failed:', err.message);
       const metaLeft = metaEntries.slice(0, 2);

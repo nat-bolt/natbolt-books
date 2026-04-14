@@ -7,7 +7,7 @@ function fmtDate(ts) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function BillPreviewSheet({ bill, shop, customer, t, lang }) {
+export default function BillPreviewSheet({ bill, shop, customer, t, lang, previewAssets = {} }) {
   const isEstimate = bill.type === 'estimate';
   const items = bill.items || [];
   const partsSubtotal = Number(
@@ -48,11 +48,10 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang }) {
                 <p className="mt-1 text-[11px] opacity-90">Ph: {shop.phone}</p>
               )}
             </div>
-            {shop?.shopPhotoUrl && (
+            {(previewAssets.shopPhotoUrl || shop?.shopPhotoUrl) && (
               <img
-                src={shop.shopPhotoUrl}
+                src={previewAssets.shopPhotoUrl || shop.shopPhotoUrl}
                 alt="Shop"
-                crossOrigin="anonymous"
                 className="w-16 h-16 rounded-2xl object-cover border border-white/20 bg-white/10"
               />
             )}
@@ -64,12 +63,11 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang }) {
         </div>
 
         <div className="p-4 space-y-4">
-          <div className={`gap-4 ${bill.jobPhotoUrl ? 'flex items-start' : 'block'}`}>
-            {bill.jobPhotoUrl && (
+          <div className={`gap-4 ${(previewAssets.jobPhotoUrl || bill.jobPhotoUrl) ? 'flex items-start' : 'block'}`}>
+            {(previewAssets.jobPhotoUrl || bill.jobPhotoUrl) && (
               <img
-                src={bill.jobPhotoUrl}
+                src={previewAssets.jobPhotoUrl || bill.jobPhotoUrl}
                 alt="Job"
-                crossOrigin="anonymous"
                 className="w-28 h-24 rounded-2xl object-cover border border-gray-200 bg-gray-100 shrink-0"
               />
             )}
@@ -143,17 +141,16 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang }) {
             </div>
           </div>
 
-          {!isEstimate && (shop?.qrCodeUrl || shop?.upiId) && (
+          {!isEstimate && ((previewAssets.qrCodeUrl || shop?.qrCodeUrl) || shop?.upiId) && (
             <div className="rounded-2xl border border-gray-200 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-mid">{t('pdf.payVia')}</p>
               {shop?.upiId && (
                 <p className="mt-2 text-[12px] text-gray-700 break-all">UPI: {shop.upiId}</p>
               )}
-              {shop?.qrCodeUrl && (
+              {(previewAssets.qrCodeUrl || shop?.qrCodeUrl) && (
                 <img
-                  src={shop.qrCodeUrl}
+                  src={previewAssets.qrCodeUrl || shop.qrCodeUrl}
                   alt="Payment QR"
-                  crossOrigin="anonymous"
                   className="mt-3 w-28 h-28 rounded-2xl border border-gray-200 bg-white"
                 />
               )}
