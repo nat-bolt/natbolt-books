@@ -7,7 +7,6 @@ export default function PdfPreviewModal({
   loading,
   onClose,
   onDownload,
-  captureNode,
 }) {
   const { t } = useTranslation();
 
@@ -30,7 +29,7 @@ export default function PdfPreviewModal({
           <button
             className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5"
             onClick={onDownload}
-            disabled={!pdfUrl || loading}
+            disabled={!previewImageUrl || loading}
           >
             <Download className="w-4 h-4" />
             {t('bill.downloadPdf')}
@@ -62,12 +61,6 @@ export default function PdfPreviewModal({
           </div>
         )}
       </div>
-
-      {captureNode && (
-        <div className="fixed left-[-10000px] top-0 pointer-events-none">
-          {captureNode}
-        </div>
-      )}
     </div>
   );
 }

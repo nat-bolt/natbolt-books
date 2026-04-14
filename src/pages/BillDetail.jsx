@@ -225,7 +225,10 @@ export default function BillDetail() {
         loading={pdfLoading}
         onClose={handleClosePreview}
         onDownload={handleDownloadPreview}
-        captureNode={bill && shop ? (
+      />
+
+      {bill && shop && (
+        <div className="fixed left-[-10000px] top-0 pointer-events-none">
           <div ref={previewRef}>
             <BillPreviewSheet
               bill={bill}
@@ -235,8 +238,8 @@ export default function BillDetail() {
               lang={language}
             />
           </div>
-        ) : null}
-      />
+        </div>
+      )}
 
       <div className="p-4 space-y-4 pb-40">
         {/* Status */}

@@ -13,9 +13,18 @@ createRoot(document.getElementById('root')).render(
 // (opens without URL bar, like a native app). Safe to skip silently if not supported.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW registration failure is non-fatal — app still works normally
+    let refreshing = false
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return
+      refreshing = true
+      window.location.reload()
     })
+
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => registration.update())
+      .catch(() => {
+        // SW registration failure is non-fatal — app still works normally
+      })
   })
 }
-
