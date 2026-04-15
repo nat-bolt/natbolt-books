@@ -40,7 +40,7 @@ export default function PdfPreviewModal({
 
       <div
         className="flex-1 min-h-0 bg-gray-100 overflow-y-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 4px)' }}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
       >
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-brand-dark">
@@ -48,12 +48,14 @@ export default function PdfPreviewModal({
             <p className="text-sm font-medium">{t('common.loading')}</p>
           </div>
         ) : previewImageUrl ? (
-          <div className="px-3 py-3">
-            <img
-              src={previewImageUrl}
-              alt={t('bill.viewPdf')}
-              className="w-full h-auto rounded-2xl shadow-md border border-gray-200 bg-white"
-            />
+          <div className="px-3 pt-4 pb-6">
+            <div className="mx-auto max-w-full rounded-[28px] bg-white shadow-lg border border-gray-200 p-3">
+              <img
+                src={previewImageUrl}
+                alt={t('bill.viewPdf')}
+                className="w-full h-auto rounded-2xl border border-gray-200 bg-white block"
+              />
+            </div>
           </div>
         ) : (
           <div className="h-full flex items-center justify-center px-6 text-center text-sm text-gray-500">

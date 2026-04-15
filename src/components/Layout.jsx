@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -18,6 +18,9 @@ export default function Layout({ children, title, showBack = false }) {
   // Toast state for language-change confirmation
   const [langToast, setLangToast] = useState('');
   const [toastTimer, setToastTimer] = useState(null);
+  const [bottomNavOffset, setBottomNavOffset] = useState('72px');
+  const shellRef = useRef(null);
+  const navRef = useRef(null);
 
   const tabs = [
     { path: '/',          icon: LayoutDashboard, labelKey: 'dashboard.today'   },
@@ -40,14 +43,38 @@ export default function Layout({ children, title, showBack = false }) {
 
   const langLabel = { en: 'EN', hi: 'हि', te: 'తె' };
 
+  useEffect(() => {
+    const updateBottomNavOffset = () => {
+      const navHeight = navRef.current?.getBoundingClientRect?.().height;
+      if (!navHeight) return;
+      setBottomNavOffset(`${Math.ceil(navHeight)}px`);
+    };
+
+    updateBottomNavOffset();
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateBottomNavOffset)
+      : null;
+
+    if (resizeObserver && navRef.current) resizeObserver.observe(navRef.current);
+    window.addEventListener('resize', updateBottomNavOffset);
+    window.visualViewport?.addEventListener('resize', updateBottomNavOffset);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateBottomNavOffset);
+      window.visualViewport?.removeEventListener('resize', updateBottomNavOffset);
+    };
+  }, []);
+
   return (
     <div
+      ref={shellRef}
       className="app-shell flex flex-col max-w-lg mx-auto w-full"
       style={{
         backgroundColor: '#F5F0EB',
         '--bottom-nav-safe': 'max(env(safe-area-inset-bottom), 4px)',
-        '--bottom-nav-height': '56px',
-        '--bottom-nav-offset': 'calc(var(--bottom-nav-safe) + var(--bottom-nav-height))',
+        '--bottom-nav-offset': bottomNavOffset,
       }}
     >
       {/* Top bar
@@ -128,6 +155,7 @@ export default function Layout({ children, title, showBack = false }) {
             that report safe-area-inset-bottom = 0 in PWA mode, which would
             otherwise place the nav tabs inside the OS gesture zone. */}
       <nav
+        ref={navRef}
         className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex z-20"
         style={{ backgroundColor: '#0b0b0b', paddingBottom: 'var(--bottom-nav-safe)' }}
       >
