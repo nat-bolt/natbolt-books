@@ -1,18 +1,35 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
+import { useTranslation } from 'react-i18next';
 import {
   Plus, Store, Crown, RefreshCw, LogOut, ChevronRight, X,
   BarChart2, MapPin, Package, TrendingUp, ChevronDown, ChevronUp,
-  ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive,
+  ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive, ArrowRight,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { supabase, mapShop } from '../supabase';
 import useStore from '../store/useStore';
+import Layout from '../components/Layout';
 import { FREE_BILL_LIMIT } from '../config';
 import { UNIQUE_CITIES } from '../data/cities';
+import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../utils/shopAddress';
 
 const FREE_LIMIT = FREE_BILL_LIMIT;
+
+function SetupStepChip({ active, complete, label }) {
+  const stateClass = active
+    ? 'border-brand-mid bg-brand-mid text-white shadow-[0_10px_24px_rgba(240,96,34,0.2)]'
+    : complete
+      ? 'border-brand-light bg-brand-light/70 text-brand-mid'
+      : 'border-gray-200 bg-white text-gray-500';
+
+  return (
+    <div className={`rounded-2xl border px-3 py-2 text-center text-xs font-semibold ${stateClass}`}>
+      {label}
+    </div>
+  );
+}
 
 // ── URL safety helper ─────────────────────────────────────────────────────────
 // Ensures URLs rendered as <a href> are limited to http/https, preventing
@@ -29,8 +46,11 @@ function isSafeUrl(url) {
 
 // ── Create / Edit Shop Modal ──────────────────────────────────────────────────
 function ShopFormModal({ existing, onSave, onClose }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
+  const [step, setStep] = useState(0);
+  const [initialAddressLine1, initialAddressLine2] = splitAddressForForm(existing?.address || '');
 
   const [form, setForm] = useState({
     shopName:  existing?.shopName  || '',
@@ -38,7 +58,8 @@ function ShopFormModal({ existing, onSave, onClose }) {
     phone:     existing?.phone     || '',
     gstNumber: existing?.gstNumber || '',
     upiId:     existing?.upiId     || '',
-    address:   existing?.address   || '',
+    addressLine1: initialAddressLine1,
+    addressLine2: initialAddressLine2,
     city:      existing?.city      || '',
     pincode:   existing?.pincode   || '',
     mapsUrl:   existing?.mapsUrl   || '',
@@ -57,6 +78,12 @@ function ShopFormModal({ existing, onSave, onClose }) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
+  const steps = [
+    t('setup.stepBusiness'),
+    t('setup.stepContact'),
+    t('setup.stepPayments'),
+    t('setup.stepAssets'),
+  ];
 
   const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -133,15 +160,20 @@ function ShopFormModal({ existing, onSave, onClose }) {
   };
 
   const handleSave = async () => {
-    if (!form.shopName.trim()) { setError('Shop name is required'); return; }
-    if (!form.phone.trim())    { setError('Phone number is required'); return; }
-    if (form.mapsUrl.trim() && !isSafeUrl(form.mapsUrl.trim())) {
-      setError('Google Maps link must be a valid https:// URL');
-      return;
-    }
+    if (!validateStep(0) || !validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
     const rawPhone = form.phone.replace(/\D/g, '');
-    const e164 = rawPhone.startsWith('91') ? `+${rawPhone}` : `+91${rawPhone}`;
+    const address = joinAddressLines(form.addressLine1, form.addressLine2);
+    const e164 = rawPhone.length === 10
+      ? `+91${rawPhone}`
+      : rawPhone.length === 12 && rawPhone.startsWith('91')
+        ? `+${rawPhone}`
+        : '';
+
+    if (!e164) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -166,7 +198,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
             owner_name:     form.ownerName.trim() || null,
             gst_number:     form.gstNumber.trim() || null,
             upi_id:         form.upiId.trim()     || null,
-            address:        form.address.trim()   || null,
+            address:        address || null,
             city:           form.city.trim()      || null,
             pincode:        form.pincode.trim()   || null,
             maps_url:       form.mapsUrl.trim()   || null,
@@ -178,7 +210,14 @@ function ShopFormModal({ existing, onSave, onClose }) {
           .eq('id', existing.id);
 
         if (err) throw err;
-        onSave({ ...existing, ...form, phone: e164, qrCodeUrl, shopPhotoUrl });
+        onSave({
+          ...existing,
+          ...form,
+          address,
+          phone: e164,
+          qrCodeUrl,
+          shopPhotoUrl,
+        });
 
       } else {
         // ── Create new shop ─────────────────────────────────────────────────
@@ -190,7 +229,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
             owner_name: form.ownerName.trim() || null,
             gst_number: form.gstNumber.trim() || null,
             upi_id:     form.upiId.trim()     || null,
-            address:    form.address.trim()   || null,
+            address:    address || null,
             city:       form.city.trim()      || null,
             pincode:    form.pincode.trim()   || null,
             maps_url:   form.mapsUrl.trim()   || null,
@@ -272,243 +311,354 @@ Happy billing! 🚀
     }
   };
 
+  const validateStep = (targetStep = step) => {
+    if (targetStep === 0) {
+      if (!form.shopName.trim()) {
+        setError(t('setup.shopNameRequired'));
+        return false;
+      }
+    }
+
+    if (targetStep === 1) {
+      if (!form.phone.trim()) {
+        setError('Phone number is required');
+        return false;
+      }
+    }
+
+    if (targetStep === 2) {
+      if (!form.upiId.trim()) {
+        setError(t('setup.upiRequired'));
+        return false;
+      }
+    }
+
+    if (targetStep === 3) {
+      if (form.mapsUrl.trim() && !isSafeUrl(form.mapsUrl.trim())) {
+        setError('Google Maps link must be a valid https:// URL');
+        return false;
+      }
+      if (!displayPhoto) {
+        setError(t('setup.shopPhotoRequired'));
+        return false;
+      }
+    }
+
+    setError('');
+    return true;
+  };
+
+  const handleNext = () => {
+    if (!validateStep()) return;
+    setStep((prev) => Math.min(prev + 1, steps.length - 1));
+  };
+
+  const handleBack = () => {
+    setError('');
+    setStep((prev) => Math.max(prev - 1, 0));
+  };
+
   // Current files to display (new previews take priority over stored URLs)
   const displayQr = qrPreview || existing?.qrCodeUrl || null;
   const displayPhoto = photoPreview || existing?.shopPhotoUrl || null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-end z-50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(8,8,8,0.42)] px-4 py-6"
+      onClick={onClose}
+    >
       <div
-        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md overflow-hidden rounded-[30px] border border-white/70 bg-white shadow-[0_32px_80px_rgba(0,0,0,0.24)]"
+        style={{ maxHeight: 'calc(var(--app-height) - 32px)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-brand-dark">
-            {existing ? 'Edit Shop' : 'Register New Shop'}
-          </h2>
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+          <div>
+            <h2 className="text-xl font-bold text-brand-dark">
+              {existing ? 'Edit Shop' : 'Register New Shop'}
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {steps[step]}
+            </p>
+          </div>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
-        <div className="space-y-3">
-
-          {/* Shop Name */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">Shop Name *</label>
-            <input className="input-field" placeholder="e.g. Raju Two-Wheeler Service"
-              value={form.shopName} onChange={setField('shopName')} />
+        <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: 'calc(var(--app-height) - 164px)' }}>
+          <div className="mb-5 grid grid-cols-4 gap-2">
+            {steps.map((label, index) => (
+              <SetupStepChip
+                key={label}
+                label={label}
+                active={index === step}
+                complete={index < step}
+              />
+            ))}
           </div>
 
-          {/* Owner Name */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">Owner Name</label>
-            <input className="input-field" placeholder="Owner full name"
-              value={form.ownerName} onChange={setField('ownerName')} />
+          <div className="space-y-4">
+            {step === 0 ? (
+              <>
+                <div>
+                  <label className="section-label">{t('setup.shopName')} *</label>
+                  <input className="input-field" placeholder={t('setup.shopNamePlaceholder')}
+                    value={form.shopName} onChange={setField('shopName')} />
+                </div>
+
+                <div>
+                  <label className="section-label">{t('setup.ownerName')}</label>
+                  <input className="input-field" placeholder={t('setup.ownerNamePlaceholder')}
+                    value={form.ownerName} onChange={setField('ownerName')} />
+                </div>
+
+                <div>
+                  <label className="section-label">{t('setup.gstNumber')}</label>
+                  <input className="input-field" placeholder={t('setup.gstPlaceholder')}
+                    value={form.gstNumber} onChange={setField('gstNumber')} />
+                </div>
+              </>
+            ) : null}
+
+            {step === 1 ? (
+              <>
+                <div>
+                  <label className="section-label">
+                    Phone Number * <span className="text-gray-400 font-normal">(10 digits or +91...)</span>
+                  </label>
+                  <input className="input-field" type="tel" placeholder="9876543210"
+                    value={form.phone} onChange={setField('phone')}
+                    disabled={!!existing}
+                  />
+                  {existing && (
+                    <p className="text-xs text-gray-400 mt-1">Phone cannot be changed after registration</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="section-label">{t('settings.addressLine1')}</label>
+                  <input
+                    className="input-field"
+                    maxLength={ADDRESS_LINE_LIMIT}
+                    placeholder={t('settings.addressLinePlaceholder', { count: 1 })}
+                    value={form.addressLine1}
+                    onChange={setField('addressLine1')}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{form.addressLine1.length}/{ADDRESS_LINE_LIMIT}</p>
+                </div>
+
+                <div>
+                  <label className="section-label">{t('settings.addressLine2')}</label>
+                  <input
+                    className="input-field"
+                    maxLength={ADDRESS_LINE_LIMIT}
+                    placeholder={t('settings.addressLinePlaceholder', { count: 2 })}
+                    value={form.addressLine2}
+                    onChange={setField('addressLine2')}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{form.addressLine2.length}/{ADDRESS_LINE_LIMIT}</p>
+                </div>
+
+                <div>
+                  <label className="section-label">{t('setup.city')}</label>
+                  <select className="input-field" value={form.city} onChange={setField('city')}>
+                    <option value="">{t('setup.cityPlaceholder')}</option>
+                    {UNIQUE_CITIES.map((city) => (
+                      <option key={city.name + city.code} value={city.name}>
+                        {city.name} ({city.state})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">{t('setup.cityHint')}</p>
+                </div>
+
+                <div>
+                  <label className="section-label">{t('setup.pincode')}</label>
+                  <input className="input-field" placeholder={t('setup.pincodePlaceholder')}
+                    maxLength={10} inputMode="numeric"
+                    value={form.pincode} onChange={setField('pincode')} />
+                  <p className="text-xs text-gray-500 mt-1">{t('setup.pincodeHint')}</p>
+                </div>
+              </>
+            ) : null}
+
+            {step === 2 ? (
+              <>
+                <div>
+                  <label className="section-label">{t('setup.upiId')} *</label>
+                  <input className="input-field" placeholder={t('setup.upiPlaceholder')}
+                    value={form.upiId} onChange={setField('upiId')} />
+                  <p className="text-xs text-gray-500 mt-1">{t('setup.upiRequired')}</p>
+                </div>
+
+                <div>
+                  <label className="section-label flex items-center gap-1.5">
+                    <QrCode className="w-3.5 h-3.5" />
+                    {t('setup.paymentQr')}
+                  </label>
+
+                  {displayQr ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={displayQr}
+                        alt="QR"
+                        className="w-20 h-20 object-contain rounded-xl border border-gray-200 bg-white flex-shrink-0"
+                      />
+                      <div className="flex-1 space-y-1.5">
+                        {qrPreview
+                          ? <p className="text-xs text-amber-600 font-medium">New QR selected — will upload on save</p>
+                          : <p className="text-xs text-green-600 font-medium">✓ QR code set</p>
+                        }
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
+                        >
+                          {qrPreview ? 'Choose different image' : 'Replace QR image'}
+                        </button>
+                        {qrPreview && (
+                          <button type="button" onClick={clearQrPick} className="w-full text-xs text-gray-400 py-1">
+                            Clear selection
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex items-center justify-center gap-2 text-gray-400 text-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {t('setup.paymentQrUpload')}
+                    </button>
+                  )}
+
+                  {qrError && <p className="text-red-500 text-xs mt-1">{qrError}</p>}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={handleQrPick}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {step === 3 ? (
+              <>
+                <div>
+                  <label className="section-label">{t('setup.mapsLink')}</label>
+                  <input className="input-field" placeholder={t('setup.mapsPlaceholder')}
+                    value={form.mapsUrl} onChange={setField('mapsUrl')} />
+                  <p className="text-xs text-gray-500 mt-1">{t('setup.mapsHint')}</p>
+                </div>
+
+                <div>
+                  <label className="section-label">Plan</label>
+                  <div className="flex gap-2">
+                    {['free', 'paid'].map((p) => (
+                      <button
+                        type="button"
+                        key={p}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${form.plan === p ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'}`}
+                        onClick={() => setForm((f) => ({ ...f, plan: p }))}
+                      >
+                        {p === 'free' ? '🆓 Free (30 bills/mo)' : '⭐ Paid (Unlimited)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="section-label flex items-center gap-1.5">
+                    <Image className="w-3.5 h-3.5" />
+                    {t('setup.shopPhoto')} *
+                  </label>
+
+                  {displayPhoto ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={displayPhoto}
+                        alt="Shop"
+                        className="w-20 h-20 object-cover rounded-xl border border-gray-200 bg-white flex-shrink-0"
+                      />
+                      <div className="flex-1 space-y-1.5">
+                        {photoPreview
+                          ? <p className="text-xs text-amber-600 font-medium">New photo selected — will upload on save</p>
+                          : <p className="text-xs text-green-600 font-medium">✓ Shop photo set</p>
+                        }
+                        <button
+                          type="button"
+                          onClick={() => photoInputRef.current?.click()}
+                          className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
+                        >
+                          {photoPreview ? 'Choose different image' : 'Replace photo'}
+                        </button>
+                        {photoPreview && (
+                          <button type="button" onClick={clearPhotoPick} className="w-full text-xs text-gray-400 py-1">
+                            Clear selection
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex items-center justify-center gap-2 text-gray-400 text-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {t('setup.shopPhotoUpload')}
+                    </button>
+                  )}
+
+                  {photoError && <p className="text-red-500 text-xs mt-1">{photoError}</p>}
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={handlePhotoPick}
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
 
-          {/* Phone */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Phone Number * <span className="text-gray-400 font-normal">(10 digits or +91...)</span>
-            </label>
-            <input className="input-field" type="tel" placeholder="9876543210"
-              value={form.phone} onChange={setField('phone')}
-              disabled={!!existing}
-            />
-            {existing && (
-              <p className="text-xs text-gray-400 mt-1">Phone cannot be changed after registration</p>
-            )}
-          </div>
+          {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
 
-          {/* UPI ID */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">UPI ID</label>
-            <input className="input-field" placeholder="shop@upi"
-              value={form.upiId} onChange={setField('upiId')} />
-          </div>
+          <div className="flex gap-3 mt-5">
+            {step > 0 ? (
+              <button
+                type="button"
+                className="btn-secondary flex-1"
+                onClick={handleBack}
+                disabled={saving}
+              >
+                {t('common.back')}
+              </button>
+            ) : null}
 
-          {/* GST Number */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">GST Number</label>
-            <input className="input-field" placeholder="36ABCDE1234F1Z5 (optional)"
-              value={form.gstNumber} onChange={setField('gstNumber')} />
-          </div>
-
-          {/* Address */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">Address</label>
-            <textarea className="input-field" rows={2} placeholder="Shop address"
-              value={form.address} onChange={setField('address')} />
-          </div>
-
-          {/* City */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              City <span className="text-gray-400 font-normal">(shop code & analytics)</span>
-            </label>
-            <select
-              className="input-field"
-              value={form.city}
-              onChange={setField('city')}
+            <button
+              type="button"
+              className="btn-primary flex-1"
+              onClick={step === steps.length - 1 ? handleSave : handleNext}
+              disabled={saving}
             >
-              <option value="">Select city</option>
-              {UNIQUE_CITIES.map((city) => (
-                <option key={city.name + city.code} value={city.name}>
-                  {city.name} ({city.state})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Pincode */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Pincode <span className="text-gray-400 font-normal">(shop code & analytics)</span>
-            </label>
-            <input className="input-field" placeholder="e.g. 500032"
-              maxLength={10} inputMode="numeric"
-              value={form.pincode} onChange={setField('pincode')} />
-          </div>
-
-          {/* Google Maps URL */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Google Maps Link <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input className="input-field" placeholder="Paste Google Maps share link"
-              value={form.mapsUrl} onChange={setField('mapsUrl')} />
-          </div>
-
-          {/* Shop Photo */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 flex items-center gap-1.5">
-              <Image className="w-3.5 h-3.5" />
-              Shop Photo <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-
-            {displayPhoto ? (
-              <div className="flex items-center gap-3">
-                <img
-                  src={displayPhoto}
-                  alt="Shop"
-                  className="w-20 h-20 object-cover rounded-xl border border-gray-200 bg-white flex-shrink-0"
-                />
-                <div className="flex-1 space-y-1.5">
-                  {photoPreview
-                    ? <p className="text-xs text-amber-600 font-medium">New photo selected — will upload on save</p>
-                    : <p className="text-xs text-green-600 font-medium">✓ Shop photo set</p>
-                  }
-                  <button
-                    onClick={() => photoInputRef.current?.click()}
-                    className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
-                  >
-                    {photoPreview ? 'Choose different image' : 'Replace photo'}
-                  </button>
-                  {photoPreview && (
-                    <button onClick={clearPhotoPick} className="w-full text-xs text-gray-400 py-1">
-                      Clear selection
-                    </button>
+              {saving
+                ? (qrFile || photoFile ? 'Saving files...' : 'Saving...')
+                : step === steps.length - 1
+                  ? (existing ? 'Save Changes' : 'Register Shop')
+                  : (
+                    <span className="inline-flex items-center gap-2">
+                      {t('setup.next')}
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
                   )}
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => photoInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex items-center justify-center gap-2 text-gray-400 text-sm"
-              >
-                <Upload className="w-4 h-4" />
-                Upload shop photo (PNG/JPG)
-              </button>
-            )}
-
-            {photoError && <p className="text-red-500 text-xs mt-1">{photoError}</p>}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg"
-              className="hidden"
-              onChange={handlePhotoPick}
-            />
-          </div>
-
-          {/* Payment QR Code */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 flex items-center gap-1.5">
-              <QrCode className="w-3.5 h-3.5" />
-              Payment QR Code <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-
-            {displayQr ? (
-              <div className="flex items-center gap-3">
-                <img
-                  src={displayQr}
-                  alt="QR"
-                  className="w-20 h-20 object-contain rounded-xl border border-gray-200 bg-white flex-shrink-0"
-                />
-                <div className="flex-1 space-y-1.5">
-                  {qrPreview
-                    ? <p className="text-xs text-amber-600 font-medium">New QR selected — will upload on save</p>
-                    : <p className="text-xs text-green-600 font-medium">✓ QR code set</p>
-                  }
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
-                  >
-                    {qrPreview ? 'Choose different image' : 'Replace QR image'}
-                  </button>
-                  {qrPreview && (
-                    <button onClick={clearQrPick} className="w-full text-xs text-gray-400 py-1">
-                      Clear selection
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex items-center justify-center gap-2 text-gray-400 text-sm"
-              >
-                <Upload className="w-4 h-4" />
-                Upload QR image (PNG/JPG)
-              </button>
-            )}
-
-            {qrError && <p className="text-red-500 text-xs mt-1">{qrError}</p>}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg"
-              className="hidden"
-              onChange={handleQrPick}
-            />
-          </div>
-
-          {/* Plan toggle */}
-          <div>
-            <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">Plan</label>
-            <div className="flex gap-2">
-              {['free', 'paid'].map((p) => (
-                <button key={p}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${form.plan === p ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'}`}
-                  onClick={() => setForm((f) => ({ ...f, plan: p }))}
-                >
-                  {p === 'free' ? '🆓 Free (30 bills/mo)' : '⭐ Paid (Unlimited)'}
-                </button>
-              ))}
-            </div>
+            </button>
           </div>
         </div>
-
-        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
-
-        <button
-          className="btn-primary w-full mt-5"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving
-            ? (qrFile || photoFile ? 'Saving files...' : 'Saving...')
-            : existing ? 'Save Changes' : 'Register Shop'}
-        </button>
       </div>
     </div>
   );
@@ -873,31 +1023,30 @@ export default function AdminPanel() {
   }, [shops]);
 
   if (authLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-light">
-      <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
-    </div>
+    <Layout title="NatBolt Admin" showNav={false} showLanguage={false}>
+      <div className="flex justify-center py-16">
+        <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+      </div>
+    </Layout>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto">
-      {/* Header
-          paddingTop includes env(safe-area-inset-top) so the logout button and title clear
-          the Dynamic Island / notch on iPhone PWA (black-translucent status bar). */}
-      <header
-        className="bg-brand-dark text-white px-4 flex items-center justify-between sticky top-0 z-10 shadow-md"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
-      >
+    <Layout
+      showNav={false}
+      showLanguage={false}
+      titleNode={(
         <div>
           <h1 className="text-lg font-bold">NatBolt Admin</h1>
-          <p className="text-xs text-brand-light">{user?.phoneNumber}</p>
+          <p className="text-xs text-gray-500">{user?.phoneNumber}</p>
         </div>
-        <button onClick={handleLogout} className="p-2 rounded-xl bg-white/10">
+      )}
+      headerRight={(
+        <button onClick={handleLogout} className="rounded-xl border border-[#E8DED3] bg-white p-2 text-brand-dark shadow-sm">
           <LogOut className="w-5 h-5" />
         </button>
-      </header>
-
-      <div className="p-4 space-y-4"
-        style={{ paddingBottom: 'calc(max(env(safe-area-inset-bottom), 8px) + 32px)' }}>
+      )}
+    >
+      <div className="p-4 space-y-4 pb-8">
 
         {/* ── Stats grid (4 cards) ── */}
         <div className="grid grid-cols-2 gap-3">
@@ -1113,6 +1262,6 @@ export default function AdminPanel() {
           onClose={() => setModal(null)}
         />
       )}
-    </div>
+    </Layout>
   );
 }

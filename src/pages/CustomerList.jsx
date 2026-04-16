@@ -388,8 +388,11 @@ export default function CustomerList() {
 
       {/* FAB — Add Customer (sits above bottom nav) */}
       <button
-        className="fixed bottom-20 right-4 max-w-[calc(512px-1rem)] w-14 h-14 bg-brand-mid text-white rounded-full shadow-lg flex items-center justify-center z-10 active:scale-95 transition-transform"
-        style={{ right: 'max(1rem, calc(50% - 256px + 1rem))' }}
+        className="fixed right-4 max-w-[calc(512px-1rem)] w-14 h-14 bg-brand-mid text-white rounded-full shadow-lg flex items-center justify-center z-10 active:scale-95 transition-transform"
+        style={{
+          bottom: 'var(--fab-bottom-offset)',
+          right: 'max(1rem, calc(50% - 256px + 1rem))',
+        }}
         onClick={() => setShowAddModal(true)}
         aria-label="Add customer"
       >

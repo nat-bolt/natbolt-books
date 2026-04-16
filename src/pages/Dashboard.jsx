@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  PlusCircle, Receipt, FileText, TrendingUp,
+  Receipt, FileText, TrendingUp,
   AlertCircle, Download, Users, Lock, Crown, X, LockOpen
 } from 'lucide-react';
 import { supabase, mapBill } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
+import InlineNotice from '../components/InlineNotice';
+import StatusBadge from '../components/StatusBadge';
 import { exportBillsCSV } from '../utils/exportCsv';
 import { FREE_BILL_LIMIT } from '../config';
 
@@ -49,7 +51,7 @@ function UpgradeModal({ feature, onClose, onUpgrade }) {
           onClick={onUpgrade}
         >
           <Crown className="w-4 h-4" />
-          <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+          <span>{t('dashboard.upgradeFeatureCta')}</span>
         </button>
         <button className="mt-3 text-sm text-gray-400 w-full py-2" onClick={onClose}>
           {t('dashboard.maybeLater')}
@@ -69,6 +71,7 @@ export default function Dashboard() {
   const [loading, setLoading]     = useState(true);
   const [stats, setStats]         = useState({ today: 0, month: 0, revenue: 0 });
   const [upgradeModal, setUpgradeModal] = useState(''); // '' | feature name string
+  const [activityFilter, setActivityFilter] = useState('all');
 
   useEffect(() => {
     if (!shop) return;
@@ -124,6 +127,7 @@ export default function Dashboard() {
   };
 
   const used        = shop?.billsThisMonth || 0;
+  const isPaid      = shop?.plan === 'paid';
   const isNearLimit = shop?.plan === 'free' && used >= FREE_LIMIT - 5;
   const isAtLimit   = shop?.plan === 'free' && used >= FREE_LIMIT;
 
@@ -134,205 +138,279 @@ export default function Dashboard() {
   };
 
   const statusBadge = (b) => {
-    if (b.type === 'estimate') return <span className="badge-estimate">EST</span>;
-    if (b.status === 'paid')   return <span className="badge-paid">PAID</span>;
-    if (b.status === 'advance') return <span className="badge-partial">ADV</span>;
-    if (b.status === 'void')   return <span className="badge-void">VOID</span>;
-    return <span className="badge-bill">BILL</span>;
+    if (b.type === 'estimate') return <StatusBadge variant="estimate" size="md">EST</StatusBadge>;
+    if (b.status === 'paid')   return <StatusBadge variant="paid" size="md">PAID</StatusBadge>;
+    if (b.status === 'advance') return <StatusBadge variant="advance" size="md">ADV</StatusBadge>;
+    if (b.status === 'void')   return <StatusBadge variant="void" size="md">VOID</StatusBadge>;
+    return <StatusBadge variant="bill" size="md">BILL</StatusBadge>;
   };
+
+  const activityTabs = [
+    { key: 'all', label: t('dashboard.allActivity') },
+    { key: 'bills', label: t('dashboard.bills') },
+    { key: 'estimates', label: t('dashboard.estimates') },
+  ];
+
+  const visibleBills = useMemo(() => {
+    if (activityFilter === 'bills') return bills.filter((bill) => bill.type === 'bill');
+    if (activityFilter === 'estimates') return bills.filter((bill) => bill.type === 'estimate');
+    return bills;
+  }, [activityFilter, bills]);
 
   return (
     <Layout title={shop?.shopName || t('appName')}>
-      <div className="p-4 space-y-4">
+      <div className="space-y-5 p-4">
+        <section className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+            {t('dashboard.today')}
+          </p>
+          <h2 className="truncate text-2xl font-bold text-brand-dark">
+            {shop?.shopName || t('appName')}
+          </h2>
+        </section>
 
-        {/* Free plan banner */}
         {isAtLimit ? (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-red-700 font-medium text-sm">{t('dashboard.limitReached')}</p>
+          <InlineNotice
+            tone="danger"
+            icon={AlertCircle}
+            title={t('dashboard.limitReached')}
+            action={(
               <button
-                className="mt-2 text-xs font-bold text-white bg-accent px-3 py-1.5 rounded-lg"
+                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-white"
+                onClick={() => navigate('/settings')}
+              >
+                {t('dashboard.upgradeNow')}
+              </button>
+            )}
+          />
+        ) : isNearLimit ? (
+          <InlineNotice
+            compact
+            tone="warning"
+            icon={AlertCircle}
+            action={(
+              <button
+                className="text-xs font-bold text-accent"
+                onClick={() => navigate('/settings')}
+              >
+                {t('dashboard.upgradeNow')}
+              </button>
+            )}
+          >
+            {t('dashboard.freePlanBanner', { used })}
+          </InlineNotice>
+        ) : null}
+
+        {!isPaid ? (
+          <div className="rounded-[28px] border border-brand-mid/15 bg-gradient-to-r from-white to-brand-light px-4 py-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <StatusBadge variant="warning" size="md">
+                    FREE
+                  </StatusBadge>
+                  <p className="truncate text-sm font-semibold text-brand-dark">
+                    {t('settings.freePlan')}
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  {t('settings.billsUsedThisMonth', { used })}
+                </p>
+              </div>
+              <button
+                className="rounded-xl bg-accent px-3 py-2 text-xs font-bold text-white shadow-sm"
                 onClick={() => navigate('/settings')}
               >
                 {t('dashboard.upgradeNow')}
               </button>
             </div>
           </div>
-        ) : isNearLimit ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center gap-3">
-            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <p className="text-amber-700 text-sm flex-1">
-              {t('dashboard.freePlanBanner', { used })}
-            </p>
-            <button
-              className="text-xs font-bold text-accent"
-              onClick={() => navigate('/settings')}
-            >
-              {t('dashboard.upgradeNow')}
-            </button>
-          </div>
         ) : null}
 
-        {/* Stats cards */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            className="card text-center active:bg-brand-light transition-colors"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
-              navigate('/income?period=today');
-            }}
-          >
-            <p className="text-2xl font-bold text-brand-dark">{stats.today}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.today')}</p>
-          </button>
-          <button
-            className="card text-center active:bg-brand-light transition-colors"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
-              navigate('/income?period=thisMonth');
-            }}
-          >
-            <p className="text-2xl font-bold text-brand-dark">{stats.month}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.thisMonth')}</p>
-          </button>
-          <button
-            className="card text-center active:bg-brand-light transition-colors"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
-              navigate('/income?period=thisMonth');
-            }}
-          >
-            <p className="text-lg font-bold text-green-600">{fmtCurrency(stats.revenue)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.monthRevenue')}</p>
-          </button>
-        </div>
+        <section className="space-y-3">
+          <p className="section-label">{t('dashboard.startBilling')}</p>
 
-        {/* New Bill (primary) + New Estimate (paid / secondary for free users) */}
-        <div className="flex gap-3">
-          {/* New Bill — primary CTA, always accessible on free plan */}
           <button
-            className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold"
+            className="btn-accent flex w-full items-center justify-center gap-2 rounded-[24px] py-4 text-sm font-bold shadow-md disabled:opacity-50"
             onClick={() => navigate('/estimate/new?mode=bill')}
             disabled={isAtLimit}
           >
-            <Receipt className="w-5 h-5" />
+            <Receipt className="h-5 w-5" />
             {t('dashboard.newBill')}
           </button>
 
-          {/* New Estimate — full accent for paid; outlined/secondary for free to signal locked */}
-          {shop?.plan === 'paid' ? (
-            <button
-              className="flex-1 btn-accent flex items-center justify-center gap-2 py-4 rounded-2xl shadow-md text-sm font-bold relative"
-              onClick={() => navigate('/estimate/new')}
-              disabled={isAtLimit}
-            >
-              <LockOpen className="w-3.5 h-3.5 absolute top-2 right-2 text-green-400 opacity-80" />
-              <FileText className="w-5 h-5" />
-              {t('dashboard.newEstimate')}
-            </button>
-          ) : (
-            <button
-              className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
-                         border-2 border-dashed border-brand-mid text-brand-mid bg-brand-light relative"
-              onClick={() => setUpgradeModal(t('dashboard.newEstimate'))}
-            >
-              <Lock className="w-3.5 h-3.5 absolute top-2 right-2 opacity-60" />
-              <FileText className="w-5 h-5" />
-              {t('dashboard.newEstimate')}
-            </button>
-          )}
-        </div>
+          <div className="grid grid-cols-2 gap-3">
+            {isPaid ? (
+              <button
+                className="card relative flex items-center justify-center gap-2 px-4 pr-10 py-4 text-sm font-bold text-brand-dark active:bg-brand-light"
+                onClick={() => navigate('/estimate/new')}
+                disabled={isAtLimit}
+              >
+                <LockOpen className="absolute right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-green-500" />
+                <FileText className="h-5 w-5 text-brand-mid" />
+                <span className="whitespace-nowrap">{t('dashboard.newEstimate')}</span>
+              </button>
+            ) : (
+              <button
+                className="relative flex items-center justify-center gap-2 rounded-[24px] border-2 border-dashed border-brand-mid bg-brand-light px-4 pr-10 py-4 text-sm font-bold text-brand-mid"
+                onClick={() => setUpgradeModal(t('dashboard.newEstimate'))}
+              >
+                <Lock className="absolute right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-60" />
+                <FileText className="h-5 w-5" />
+                <span className="whitespace-nowrap">{t('dashboard.newEstimate')}</span>
+              </button>
+            )}
 
-        {/* Quick action row */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.customers')); return; }
-              navigate('/customers');
-            }}
-          >
-            {shop?.plan === 'paid' ? (
-              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
-            ) : (
-              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
-            )}
-            <Users className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-brand-mid' : 'text-gray-400'}`} />
-            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.customers')}</span>
-          </button>
-          <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.income')); return; }
-              navigate('/income');
-            }}
-          >
-            {shop?.plan === 'paid' ? (
-              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
-            ) : (
-              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
-            )}
-            <TrendingUp className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-green-600' : 'text-gray-400'}`} />
-            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.income')}</span>
-          </button>
-          <button
-            className="card flex flex-col items-center gap-1.5 py-3 active:bg-brand-light relative"
-            onClick={() => {
-              if (shop?.plan !== 'paid') { setUpgradeModal(t('dashboard.exportCsv')); return; }
-              exportBillsCSV(bills, shop);
-            }}
-          >
-            {shop?.plan === 'paid' ? (
-              <LockOpen className="w-3 h-3 absolute top-2 right-2 text-green-500" />
-            ) : (
-              <Lock className="w-3 h-3 absolute top-2 right-2 text-gray-400" />
-            )}
-            <Download className={`w-5 h-5 ${shop?.plan === 'paid' ? 'text-brand-mid' : 'text-gray-400'}`} />
-            <span className="text-xs font-semibold text-brand-dark">{t('dashboard.exportCsv')}</span>
-          </button>
-        </div>
+            <button
+              className={`card relative flex items-center justify-center gap-2 py-4 text-sm font-bold ${
+                isPaid ? 'text-brand-dark active:bg-brand-light' : 'text-gray-500'
+              }`}
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.customers')); return; }
+                navigate('/customers');
+              }}
+            >
+              {!isPaid ? (
+                <Lock className="absolute right-3 top-3 h-3.5 w-3.5 text-gray-400" />
+              ) : null}
+              <Users className={`h-5 w-5 ${isPaid ? 'text-brand-mid' : 'text-gray-400'}`} />
+              {t('dashboard.customers')}
+            </button>
+          </div>
+        </section>
 
-        {/* Recent bills */}
-        <div>
-          <p className="section-label">{t('dashboard.recentActivity')}</p>
+        <section className="space-y-3">
+          <p className="section-label">{t('dashboard.overview')}</p>
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              className="card relative text-center transition-colors active:bg-brand-light"
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.income')); return; }
+                navigate('/income?period=today');
+              }}
+            >
+              {!isPaid ? <Lock className="absolute right-3 top-3 h-3 w-3 text-gray-400" /> : null}
+              <p className="text-2xl font-bold text-brand-dark">{stats.today}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{t('dashboard.today')}</p>
+            </button>
+            <button
+              className="card relative text-center transition-colors active:bg-brand-light"
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.income')); return; }
+                navigate('/income?period=thisMonth');
+              }}
+            >
+              {!isPaid ? <Lock className="absolute right-3 top-3 h-3 w-3 text-gray-400" /> : null}
+              <p className="text-2xl font-bold text-brand-dark">{stats.month}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{t('dashboard.thisMonth')}</p>
+            </button>
+            <button
+              className="card relative text-center transition-colors active:bg-brand-light"
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.income')); return; }
+                navigate('/income?period=thisMonth');
+              }}
+            >
+              {!isPaid ? <Lock className="absolute right-3 top-3 h-3 w-3 text-gray-400" /> : null}
+              <p className="text-lg font-bold text-green-600">{fmtCurrency(stats.revenue)}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{t('dashboard.monthRevenue')}</p>
+            </button>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <p className="section-label">{t('dashboard.quickTools')}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              className="card relative flex items-center gap-3 px-4 py-4 text-left active:bg-brand-light"
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.income')); return; }
+                navigate('/income');
+              }}
+            >
+              {!isPaid ? <Lock className="absolute right-3 top-3 h-3 w-3 text-gray-400" /> : <LockOpen className="absolute right-3 top-3 h-3 w-3 text-green-500" />}
+              <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${isPaid ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                <TrendingUp className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="whitespace-nowrap text-sm font-semibold text-brand-dark">{t('dashboard.income')}</p>
+              </div>
+            </button>
+
+            <button
+              className="card relative flex items-center gap-3 px-4 py-4 text-left active:bg-brand-light"
+              onClick={() => {
+                if (!isPaid) { setUpgradeModal(t('dashboard.exportCsv')); return; }
+                exportBillsCSV(bills, shop);
+              }}
+            >
+              {!isPaid ? <Lock className="absolute right-3 top-3 h-3 w-3 text-gray-400" /> : <LockOpen className="absolute right-3 top-3 h-3 w-3 text-green-500" />}
+              <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${isPaid ? 'bg-brand-light text-brand-mid' : 'bg-gray-100 text-gray-400'}`}>
+                <Download className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="whitespace-nowrap text-sm font-semibold text-brand-dark">{t('dashboard.exportCsv')}</p>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="section-label">{t('dashboard.recentActivity')}</p>
+            <div className="flex gap-2">
+              {activityTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activityFilter === tab.key
+                      ? 'bg-brand-mid text-white'
+                      : 'bg-white text-gray-500 shadow-sm'
+                  }`}
+                  onClick={() => setActivityFilter(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {loading ? (
             <div className="flex justify-center py-8">
               <div className="w-8 h-8 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : bills.length === 0 ? (
-            <div className="card text-center py-10">
-              <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">{t('dashboard.noBills')}</p>
+          ) : visibleBills.length === 0 ? (
+            <div className="card py-10 text-center">
+              <Receipt className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+              <p className="text-sm text-gray-500">{t('dashboard.noBills')}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {bills.map((bill) => (
+              {visibleBills.map((bill) => (
                 <button
                   key={bill.id}
-                  className="card w-full text-left flex items-center gap-3 active:bg-gray-50"
+                  className="card flex w-full items-center gap-3 text-left active:bg-gray-50"
                   onClick={() =>
                     navigate(bill.type === 'estimate' ? `/estimate/${bill.id}` : `/bill/${bill.id}`)
                   }
                 >
-                  <div className="w-9 h-9 rounded-xl bg-brand-light flex items-center justify-center flex-shrink-0">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-light">
                     {bill.type === 'estimate'
-                      ? <FileText className="w-5 h-5 text-brand-mid" />
-                      : <Receipt className="w-5 h-5 text-brand-mid" />}
+                      ? <FileText className="h-5 w-5 text-brand-mid" />
+                      : <Receipt className="h-5 w-5 text-brand-mid" />}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm truncate">
+                      <p className="truncate text-sm font-semibold">
                         {bill.billNumber || bill.estimateNumber}
                       </p>
                       {statusBadge(bill)}
                     </div>
-                    <p className="text-xs text-gray-500 truncate">
+                    <p className="truncate text-xs text-gray-500">
                       {bill.vehicleNo} • {bill.customerName}
                     </p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-sm text-brand-dark">
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-sm font-bold text-brand-dark">
                       ₹{Number(bill.grandTotal || 0).toLocaleString('en-IN')}
                     </p>
                     <p className="text-xs text-gray-400">{fmtDate(bill.createdAt)}</p>
@@ -341,7 +419,27 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
+        </section>
+
+        {!isPaid ? (
+          <div className="rounded-[28px] border border-brand-mid/15 bg-gradient-to-r from-white to-amber-50 px-4 py-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                <Crown className="h-6 w-6" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-brand-dark">{t('dashboard.upgradeFeatureTitle')}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{t('dashboard.upgradeSummary')}</p>
+              </div>
+            </div>
+            <button
+              className="btn-accent mt-4 w-full py-3 text-sm font-bold"
+              onClick={() => navigate('/settings')}
+            >
+              {t('dashboard.upgradeFeatureCta')}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Upgrade modal — shown when free user taps a paid feature */}

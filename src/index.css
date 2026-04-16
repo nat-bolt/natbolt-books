@@ -15,16 +15,52 @@
   font-display: swap;     /* show fallback font instantly, swap when loaded */
 }
 
+:root {
+  --app-height: 100dvh;
+  /* Safe Area Insets */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Navigation - More Compact */
+  --nav-height: 44px;
+
+  --nav-safe-padding: calc(var(--safe-bottom) * 0.25); /* Only 30% of safe area */
+  --nav-total-height: calc(var(--nav-height) + var(--nav-safe-padding));
+
+  /* Header */
+  --header-base-height: 44px;
+  --header-total-height: calc(var(--header-base-height) + var(--safe-top));
+
+  /* Page Spacing - Reduced */
+  --page-gap: 12px;
+  --page-bottom-padding: calc(var(--nav-total-height) + var(--page-gap));
+  --screen-page-bottom: calc(var(--safe-bottom) + var(--page-gap));
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+
+main {
+  -webkit-overflow-scrolling: touch;
+}
+
 @layer base {
   html, body, #root {
     height: 100%;
     width: 100%;
     overflow: hidden;
+    background-color: #0b0b0b;
   }
   * { box-sizing: border-box; }
   body {
-    /* NatBolt warm off-white surface — matches brand guidelines */
-    background-color: #F5F0EB;
+    /* Keep the viewport/safe-area paint dark so iPhone home-indicator space
+     * blends with the header/nav. Individual screens provide their own surfaces.
+     */
+    background-color: #0b0b0b;
     margin: 0;
     @apply text-gray-900;
     -webkit-font-smoothing: antialiased;
@@ -48,6 +84,7 @@
 .app-shell {
   height: var(--app-height, 100dvh);
   min-height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
 }
 
 @layer components {

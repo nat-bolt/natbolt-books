@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ArrowLeft, TrendingUp, Receipt, IndianRupee,
+  TrendingUp, Receipt, IndianRupee,
   Banknote, AlertCircle, Crown, Lock, Package
 } from 'lucide-react';
 import { supabase, mapBill } from '../supabase';
@@ -49,7 +49,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-dark', bg
 function UpgradeWall({ onUpgrade }) {
   const { t } = useTranslation();
   return (
-    <Layout title={t('income.title')}>
+    <Layout title={t('income.title')} showBack showNav={false} showLanguage={false}>
       <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
         <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Lock className="w-10 h-10 text-amber-600" />
@@ -212,26 +212,19 @@ export default function IncomeDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto"
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
-      {/* Header
-          paddingTop includes env(safe-area-inset-top) so content clears the Dynamic Island
-          and notch on all iPhone models when installed as a PWA (black-translucent status bar). */}
-      <header
-        className="bg-brand-dark text-white px-4 flex items-center gap-3 sticky top-0 z-10 shadow-md"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
-      >
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-xl bg-white/10">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="font-bold text-lg">{t('income.title')}</h1>
-          <p className="text-xs text-brand-light flex items-center gap-1">
+    <Layout
+      showBack
+      showNav={false}
+      showLanguage={false}
+      titleNode={(
+        <div>
+          <h1 className="text-lg font-bold">{t('income.title')}</h1>
+          <p className="flex items-center gap-1 text-xs text-brand-light">
             <Crown className="w-3 h-3" /> {t('income.paidFeature')}
           </p>
         </div>
-      </header>
-
+      )}
+    >
       <div className="p-4 space-y-4">
         {/* Period toggle */}
         <div className="flex bg-white rounded-2xl p-1 shadow-sm gap-1">
@@ -408,6 +401,6 @@ export default function IncomeDashboard() {
           </>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }

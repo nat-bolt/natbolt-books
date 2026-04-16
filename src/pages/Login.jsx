@@ -5,10 +5,13 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
 } from 'firebase/auth';
-import { Smartphone, KeyRound } from 'lucide-react';
+import { Smartphone, KeyRound, Pencil } from 'lucide-react';
 import { auth, isTestPhoneNumber, setTestMode } from '../firebase';
 // No Supabase session setup needed — accessToken factory in supabase.js handles it.
 import useStore from '../store/useStore';
+import AuthShell from '../components/AuthShell';
+
+const OTP_RESEND_COOLDOWN = 60;
 
 // ── Module-level singleton for RecaptchaVerifier ───────────────────────────────
 // Kept outside the component so React StrictMode's double-effect firing
@@ -78,6 +81,12 @@ function resetVerifier() {
   }
 }
 
+function formatCountdown(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export default function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -89,6 +98,7 @@ export default function Login() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [confirmResult, setConfirmResult] = useState(null);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   // ── Pre-warm reCAPTCHA verifier on mount ──────────────────────────────────
   // Initialize the verifier BEFORE user clicks button, so the Google round-trip
@@ -100,6 +110,16 @@ export default function Login() {
     // Cleanup verifier when component unmounts
     return () => resetVerifier();
   }, []);
+
+  useEffect(() => {
+    if (step !== 'otp' || resendCountdown <= 0) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setResendCountdown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [step, resendCountdown]);
 
   const handleSendOtp = async () => {
     const cleaned = phone.replace(/\D/g, '');
@@ -136,6 +156,8 @@ export default function Login() {
       const result = await signInWithPhoneNumber(auth, fullPhone, verifier);
       setConfirmResult(result);
       setStep('otp');
+      setOtp('');
+      setResendCountdown(OTP_RESEND_COOLDOWN);
       if (import.meta.env.DEV) {
         console.log('[DEBUG] OTP sent successfully');
       }
@@ -179,6 +201,12 @@ export default function Login() {
     }
   };
 
+  const handleResendOtp = async () => {
+    if (loading || resendCountdown > 0) return;
+    setError('');
+    await handleSendOtp();
+  };
+
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) {
       setError(t('login.invalidOtp'));
@@ -205,129 +233,152 @@ export default function Login() {
   };
 
   return (
-    // Same layout as before — full screen, centered card, gradient background.
-    // Only changes: gradient now uses brand black→orange, real icon replaces emoji,
-    // accent colours updated to #f06022, brand-light tint updated.
-    <div className="min-h-screen bg-gradient-to-b from-brand-dark to-brand-mid flex flex-col items-center justify-start p-6 pt-24">
-
-      {/* Logo — larger and positioned higher */}
-      <div className="text-center mb-12">
-        <img
-          src="/icons/logo.png"
-          alt="NatBolt"
-          className="w-28 h-28 rounded-3xl mx-auto mb-6 shadow-xl"
-        />
-        <h1 className="text-3xl font-bold text-white tracking-wide" style={{ fontFamily: 'Dagger Square, sans-serif' }}>
-          NatBolt Billu
-        </h1>
-        <p className="text-brand-light text-sm mt-2 opacity-80">{t('appTagline')}</p>
-      </div>
-
-      {/* Card — same max-w-sm centered white card, no structural change */}
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 mt-24">
-        {step === 'phone' ? (
-          <>
-            <div className="flex items-center gap-2 mb-5">
-              <Smartphone className="w-5 h-5 text-brand-mid" />
-              <h2 className="text-lg font-bold text-brand-dark">{t('login.title')}</h2>
+    <AuthShell
+      hero={(
+        <div className="text-center">
+          <img
+            src="/icons/logo.png"
+            alt="NatBolt"
+            className="mx-auto mb-5 h-24 w-24 rounded-3xl shadow-xl"
+          />
+          <h1
+            className="text-[2rem] font-bold tracking-wide text-white"
+            style={{ fontFamily: 'Dagger Square, sans-serif' }}
+          >
+            {t('appName')}
+          </h1>
+          <p className="mt-2 text-sm text-brand-light/90">{t('appTagline')}</p>
+        </div>
+      )}
+      footer={(
+        <>
+          Protected by reCAPTCHA. Google{' '}
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-white"
+          >
+            Privacy Policy
+          </a>
+          {' '}and{' '}
+          <a
+            href="https://policies.google.com/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-white"
+          >
+            Terms of Service
+          </a>
+          {' '}apply.
+        </>
+      )}
+    >
+      {step === 'phone' ? (
+        <>
+          <div className="mb-5 flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-light text-brand-mid">
+              <Smartphone className="h-5 w-5" />
             </div>
-
-            <label className="section-label">{t('login.phoneLabel')}</label>
-            <div className="flex gap-2 mb-4">
-              <span className="input-field w-14 text-center font-bold text-gray-600 flex-shrink-0">
-                +91
-              </span>
-              <input
-                type="tel"
-                className="input-field"
-                placeholder={t('login.phonePlaceholder')}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
-                maxLength={10}
-                inputMode="numeric"
-              />
+            <div>
+              <h2 className="text-xl font-bold text-brand-dark">{t('login.title')}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t('login.phoneHint')}</p>
             </div>
+          </div>
 
-            {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
-
-            <button
-              className="btn-primary w-full"
-              onClick={handleSendOtp}
-              disabled={loading}
-            >
-              {loading ? t('login.sending') : t('login.sendOtp')}
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 mb-5">
-              <KeyRound className="w-5 h-5 text-brand-mid" />
-              <h2 className="text-lg font-bold text-brand-dark">{t('login.otpLabel')}</h2>
-            </div>
-
-            <p className="text-sm text-gray-500 mb-4">
-              {t('login.otpSent')} +91 {phone}
-            </p>
-
-            <label className="section-label">{t('login.otpLabel')}</label>
+          <label className="section-label">{t('login.phoneLabel')}</label>
+          <div className="mb-4 flex gap-2">
+            <span className="input-field flex w-14 flex-shrink-0 items-center justify-center text-center font-bold text-gray-600">
+              +91
+            </span>
             <input
               type="tel"
-              className="input-field text-center text-2xl font-bold tracking-[0.4em] mb-4"
-              placeholder="• • • • • •"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
-              maxLength={6}
+              className="input-field"
+              placeholder={t('login.phonePlaceholder')}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
+              maxLength={10}
               inputMode="numeric"
-              autoFocus
             />
+          </div>
 
-            {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+          <p className="mb-4 text-xs text-gray-400">{t('login.phoneSupport')}</p>
 
+          {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
+
+          <button
+            className="btn-primary w-full"
+            onClick={handleSendOtp}
+            disabled={loading}
+          >
+            {loading ? t('login.sending') : t('login.sendOtp')}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="mb-5 flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-light text-brand-mid">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-brand-dark">{t('login.otpLabel')}</h2>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
+                <span>{t('login.otpSent')} +91 {phone}</span>
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-brand-mid"
+                  onClick={() => {
+                    setStep('phone');
+                    setOtp('');
+                    setError('');
+                    setResendCountdown(0);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span className="sr-only">{t('edit')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <label className="section-label">{t('login.otpLabel')}</label>
+          <input
+            type="tel"
+            className="input-field mb-4 text-center text-2xl font-bold tracking-[0.28em]"
+            placeholder={t('login.otpPlaceholder')}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
+            maxLength={6}
+            inputMode="numeric"
+            autoFocus
+          />
+
+          {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
+
+          <button
+            className="btn-primary mb-3 w-full"
+            onClick={handleVerifyOtp}
+            disabled={loading}
+          >
+            {loading ? t('login.verifying') : t('login.verifyOtp')}
+          </button>
+          <div className="flex items-center justify-start gap-3 text-sm">
             <button
-              className="btn-primary w-full mb-3"
-              onClick={handleVerifyOtp}
-              disabled={loading}
+              className="py-2 font-medium text-brand-mid disabled:text-gray-400"
+              onClick={handleResendOtp}
+              disabled={loading || resendCountdown > 0}
             >
-              {loading ? t('login.verifying') : t('login.verifyOtp')}
+              {resendCountdown > 0
+                ? t('login.resendOtpIn', { time: formatCountdown(resendCountdown) })
+                : t('login.resendOtp')}
             </button>
+          </div>
+        </>
+      )}
 
-            <button
-              className="w-full text-brand-mid text-sm font-medium py-2"
-              onClick={() => { setStep('phone'); setOtp(''); setError(''); }}
-            >
-              {t('login.resendOtp')}
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* reCAPTCHA container - invisible, no UI shown */}
       <div id="recaptcha-container" />
-
-      {/* reCAPTCHA disclosure (required by Google when badge is hidden) */}
-      <p className="text-white text-xs mt-6 text-center opacity-70">
-        Protected by reCAPTCHA. Google{' '}
-        <a
-          href="https://policies.google.com/privacy"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:opacity-100"
-        >
-          Privacy Policy
-        </a>
-        {' '}and{' '}
-        <a
-          href="https://policies.google.com/terms"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:opacity-100"
-        >
-          Terms of Service
-        </a>
-        {' '}apply.
-      </p>
-    </div>
+    </AuthShell>
   );
 }

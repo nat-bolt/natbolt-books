@@ -16,7 +16,7 @@ export default function PdfPreviewModal({
     <div className="fixed inset-0 z-50 bg-black/60 flex flex-col min-h-0" style={{ height: 'var(--app-height, 100dvh)' }}>
       <div
         className="bg-white px-4 pb-3 border-b border-gray-200 sticky top-0 z-10 shrink-0"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+        style={{ paddingTop: 'var(--screen-header-top)' }}
       >
         <div className="flex items-center justify-between gap-2">
           <button
@@ -40,7 +40,7 @@ export default function PdfPreviewModal({
 
       <div
         className="flex-1 min-h-0 bg-gray-100 overflow-y-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}
+        style={{ paddingBottom: 'var(--screen-page-bottom)' }}
       >
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-brand-dark">

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ArrowLeft, Phone, FileText, Receipt,
+  Phone, FileText, Receipt,
   ChevronRight, Calendar, IndianRupee,
   Plus, X, Car, Bike, Lock, Crown,
 } from 'lucide-react';
@@ -15,7 +15,7 @@ import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehi
 function UpgradeWall({ onUpgrade }) {
   const { t } = useTranslation();
   return (
-    <Layout title="Customer Profile">
+    <Layout title={t('customerProfile.title')} showBack showNav={false} showLanguage={false}>
       <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
         <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Lock className="w-10 h-10 text-amber-600" />
@@ -342,36 +342,33 @@ export default function CustomerProfile() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-light">
-      <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
-    </div>
+    <Layout title={t('customerProfile.title')} showBack showNav={false} showLanguage={false}>
+      <div className="flex justify-center py-16">
+        <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+      </div>
+    </Layout>
   );
   if (!customer) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto"
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
-      {/* Header
-          paddingTop includes env(safe-area-inset-top) so the back button and phone icon
-          clear the Dynamic Island / notch on iPhone PWA (black-translucent status bar). */}
-      <header
-        className="bg-brand-dark text-white px-4 flex items-center gap-3 sticky top-0 z-10 shadow-md"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
-      >
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-xl bg-white/10">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="font-bold text-lg truncate">{customer.name}</h1>
+    <Layout
+      showBack
+      showNav={false}
+      showLanguage={false}
+      titleNode={(
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-bold">{customer.name}</h1>
           <p className="text-xs text-brand-light">{t('customerProfile.title')}</p>
         </div>
-        {customer.phone && (
-          <a href={`tel:${customer.phone}`} className="p-1.5 rounded-xl bg-white/10">
-            <Phone className="w-5 h-5" />
-          </a>
-        )}
-      </header>
-
+      )}
+      headerRight={customer.phone ? (
+        <a href={`tel:${customer.phone}`} className="rounded-xl bg-white/10 p-1.5">
+          <Phone className="w-5 h-5" />
+        </a>
+      ) : (
+        <div className="w-[34px]" />
+      )}
+    >
       <div className="p-4 space-y-4">
         {/* Customer info card */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -514,6 +511,6 @@ export default function CustomerProfile() {
           onClose={() => setShowAddVehicle(false)}
         />
       )}
-    </div>
+    </Layout>
   );
 }

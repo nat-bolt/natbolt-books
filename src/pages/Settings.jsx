@@ -1,13 +1,13 @@
 import { useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { Save, LogOut, Globe, Crown, QrCode, MapPin, Upload, X, CheckCircle, Image } from 'lucide-react';
+import { Save, LogOut, Globe, Crown, QrCode, MapPin, Upload, X, CheckCircle, Image, Store, Phone } from 'lucide-react';
 import { auth } from '../firebase';
 import { supabase } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
+import ConfirmSheet from '../components/ConfirmSheet';
 import i18n from '../i18n/index';
 import { UNIQUE_CITIES } from '../data/cities';
 import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../utils/shopAddress';
@@ -17,41 +17,6 @@ const LANGUAGES = [
   { code: 'hi', label: 'Hindi',   native: 'हिंदी'   },
   { code: 'te', label: 'Telugu',  native: 'తెలుగు'  },
 ];
-
-// ── Reusable confirmation modal ───────────────────────────────────────────────
-function ConfirmModal({ title, body, confirmLabel, cancelLabel = 'Keep it', onConfirm, onCancel }) {
-  // Rendered via createPortal so it escapes the Layout <main> overflow/stacking
-  // context — fixes modals appearing behind the bottom nav on iOS WebKit PWA.
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onCancel}>
-      <div
-        className="bg-white rounded-3xl p-6 max-h-[85vh] overflow-y-auto"
-        style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag indicator — signals the sheet is scrollable if content overflows */}
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-        <h3 className="text-base font-bold text-brand-dark mb-2">{title}</h3>
-        <p className="text-sm text-gray-500 mb-6">{body}</p>
-        <div className="flex gap-3">
-          <button
-            className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600"
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-semibold"
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 export default function Settings() {
   const { t }      = useTranslation();
@@ -336,6 +301,32 @@ export default function Settings() {
     navigate('/login', { replace: true });
   };
 
+  const confirmConfig = confirmDialog === 'removeQr'
+    ? {
+        title: 'Remove payment QR?',
+        body: 'Your bill PDFs will show only the UPI ID text. You can re-upload anytime.',
+        confirmLabel: 'Remove QR',
+        cancelLabel: 'Keep QR',
+        onConfirm: doQrRemove,
+      }
+    : confirmDialog === 'removePhoto'
+      ? {
+          title: 'Remove shop photo?',
+          body: "Your bill PDFs won't show a shop photo. You can re-upload anytime.",
+          confirmLabel: 'Remove photo',
+          cancelLabel: 'Keep photo',
+          onConfirm: doPhotoRemove,
+        }
+      : confirmDialog === 'logout'
+        ? {
+            title: 'Sign out?',
+            body: "You'll need to enter your phone number and OTP to sign back in.",
+            confirmLabel: 'Sign out',
+            cancelLabel: 'Stay signed in',
+            onConfirm: doLogout,
+          }
+        : null;
+
   return (
     <Layout title={t('settings.title')}>
       <div className="p-4 space-y-4">
@@ -391,9 +382,12 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* ── Shop details ── */}
+        {/* ── Shop ── */}
         <div className="card space-y-3">
-          <p className="section-label">{t('settings.shop')}</p>
+          <div className="flex items-center gap-2">
+            <Store className="w-4 h-4 text-brand-mid" />
+            <p className="section-label mb-0">{t('setup.stepBusiness')}</p>
+          </div>
 
           <div>
             <label className="text-xs text-gray-500 mb-1 block">{t('settings.shopName')}</label>
@@ -404,12 +398,21 @@ export default function Settings() {
             <input className="input-field" value={form.ownerName} onChange={set('ownerName')} />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">{t('settings.upiId')}</label>
-            <input className="input-field" value={form.upiId} onChange={set('upiId')} />
-          </div>
-          <div>
             <label className="text-xs text-gray-500 mb-1 block">{t('settings.gstNumber')}</label>
             <input className="input-field" value={form.gstNumber} onChange={set('gstNumber')} />
+          </div>
+        </div>
+
+        {/* ── Contact ── */}
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <Phone className="w-4 h-4 text-brand-mid" />
+            <p className="section-label mb-0">{t('setup.stepContact')}</p>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">{t('settings.signedInAs')}</label>
+            <input className="input-field bg-gray-50 text-gray-500" value={shop?.phone || ''} readOnly />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">{t('settings.addressLine1')}</label>
@@ -437,57 +440,233 @@ export default function Settings() {
               {form.addressLine2.length}/{ADDRESS_LINE_LIMIT}
             </p>
           </div>
-
-          {/* City */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">City</label>
+            <label className="text-xs text-gray-500 mb-1 block">{t('setup.city')}</label>
             <select
               className="input-field"
               value={form.city}
               onChange={set('city')}
             >
-              <option value="">Select your city</option>
+              <option value="">{t('setup.cityPlaceholder')}</option>
               {UNIQUE_CITIES.map((city) => (
                 <option key={city.name + city.code} value={city.name}>
                   {city.name} ({city.state})
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">Used to generate your shop code and for analytics.</p>
+            <p className="text-xs text-gray-400 mt-1">{t('setup.cityHint')}</p>
           </div>
-
-          {/* Pincode */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Pincode</label>
+            <label className="text-xs text-gray-500 mb-1 block">{t('setup.pincode')}</label>
             <input
               className="input-field"
-              placeholder="e.g. 500032"
+              placeholder={t('setup.pincodePlaceholder')}
               maxLength={10}
               inputMode="numeric"
               value={form.pincode}
               onChange={set('pincode')}
             />
-            <p className="text-xs text-gray-400 mt-1">Used to generate your shop code and for analytics.</p>
+            <p className="text-xs text-gray-400 mt-1">{t('setup.pincodeHint')}</p>
+          </div>
+        </div>
+
+        {/* ── Payments ── */}
+        <div className="card space-y-4">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-brand-mid" />
+            <p className="section-label mb-0">{t('setup.stepPayments')}</p>
           </div>
 
-          {/* Google Maps share link */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">{t('settings.upiId')}</label>
+            <input className="input-field" value={form.upiId} onChange={set('upiId')} />
+          </div>
+
+          <div className="border-t border-gray-100 pt-4 space-y-3">
+            <div>
+              <p className="section-label mb-0">{t('settings.paymentQr')}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('settings.paymentQrDesc')}</p>
+            </div>
+
+            {(qrPreview || shop?.qrCodeUrl) ? (
+              <div className="flex items-start gap-4">
+                <div className="relative">
+                  <img
+                    src={qrPreview || shop?.qrCodeUrl}
+                    alt="Payment QR"
+                    className="w-28 h-28 object-contain rounded-xl border border-gray-200 bg-white"
+                  />
+                  {qrPreview ? (
+                    <button
+                      onClick={clearQrPick}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 text-white rounded-full flex items-center justify-center shadow"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex-1 space-y-2">
+                  {qrPreview ? (
+                    <>
+                      <p className="text-xs text-gray-500">{qrFile?.name}</p>
+                      <button
+                        className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
+                        onClick={handleQrUpload}
+                        disabled={qrUploading}
+                      >
+                        {qrUploading
+                          ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          : qrSaved
+                            ? <CheckCircle className="w-4 h-4" />
+                            : <Upload className="w-4 h-4" />}
+                        {qrUploading ? t('settings.uploading') : qrSaved ? t('settings.savedShort') : t('settings.saveQr')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-green-600 font-semibold">{t('settings.qrSet')}</p>
+                      <button
+                        className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        {t('settings.replaceQr')}
+                      </button>
+                      <button
+                        className="w-full text-xs text-red-400 font-medium py-1"
+                        onClick={handleQrRemove}
+                      >
+                        {t('settings.removeQr')}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
+              >
+                <Upload className="w-6 h-6" />
+                <span className="text-sm font-medium">{t('settings.uploadQrBtn')}</span>
+                <span className="text-xs">{t('settings.uploadQrHint')}</span>
+              </button>
+            )}
+
+            {qrError ? <p className="text-red-500 text-sm">{qrError}</p> : null}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg"
+              className="hidden"
+              onChange={handleQrPick}
+            />
+          </div>
+        </div>
+
+        {/* ── Assets ── */}
+        <div className="card space-y-4">
+          <div className="flex items-center gap-2">
+            <Image className="w-4 h-4 text-brand-mid" />
+            <p className="section-label mb-0">{t('setup.stepAssets')}</p>
+          </div>
+
           <div>
             <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
               <MapPin className="w-3 h-3 text-brand-mid" />
-              Google Maps Link <span className="text-gray-400">(optional)</span>
+              {t('setup.mapsLink')}
             </label>
             <input
               className="input-field"
-              placeholder="Paste share link from Google Maps app"
+              placeholder={t('setup.mapsPlaceholder')}
               value={form.mapsUrl}
               onChange={set('mapsUrl')}
             />
-            <p className="text-xs text-gray-400 mt-1">
-              Open Google Maps → tap your shop → Share → Copy link
-            </p>
+            <p className="text-xs text-gray-400 mt-1">{t('setup.mapsHint')}</p>
           </div>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="border-t border-gray-100 pt-4 space-y-3">
+            <div>
+              <p className="section-label mb-0">{t('settings.shopPhoto')}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('settings.shopPhotoDesc')}</p>
+            </div>
+
+            {(photoPreview || shop?.shopPhotoUrl) ? (
+              <div className="flex items-start gap-4">
+                <div className="relative">
+                  <img
+                    src={photoPreview || shop?.shopPhotoUrl}
+                    alt="Shop Photo"
+                    className="w-28 h-28 object-cover rounded-xl border border-gray-200 bg-white"
+                  />
+                  {photoPreview ? (
+                    <button
+                      onClick={clearPhotoPick}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 text-white rounded-full flex items-center justify-center shadow"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex-1 space-y-2">
+                  {photoPreview ? (
+                    <>
+                      <p className="text-xs text-gray-500">{photoFile?.name}</p>
+                      <button
+                        className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
+                        onClick={handlePhotoUpload}
+                        disabled={photoUploading}
+                      >
+                        {photoUploading
+                          ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          : photoSaved
+                            ? <CheckCircle className="w-4 h-4" />
+                            : <Upload className="w-4 h-4" />}
+                        {photoUploading ? t('settings.uploading') : photoSaved ? t('settings.savedShort') : t('settings.savePhoto')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-green-600 font-semibold">{t('settings.shopPhotoSet')}</p>
+                      <button
+                        className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        {t('settings.replacePhoto')}
+                      </button>
+                      <button
+                        className="w-full text-xs text-red-400 font-medium py-1"
+                        onClick={handlePhotoRemove}
+                      >
+                        {t('settings.removePhoto')}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
+              >
+                <Upload className="w-6 h-6" />
+                <span className="text-sm font-medium">{t('settings.uploadPhotoBtn')}</span>
+                <span className="text-xs">{t('settings.uploadPhotoHint')}</span>
+              </button>
+            )}
+
+            {photoError ? <p className="text-red-500 text-sm">{photoError}</p> : null}
+
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg"
+              className="hidden"
+              onChange={handlePhotoPick}
+            />
+          </div>
+
+          {error ? <p className="text-red-500 text-sm">{error}</p> : null}
 
           <button
             className="btn-primary w-full flex items-center justify-center gap-2"
@@ -505,182 +684,6 @@ export default function Settings() {
           </button>
         </div>
 
-        {/* ── Shop Photo ── */}
-        <div className="card space-y-3">
-          <div className="flex items-center gap-2">
-            <Image className="w-4 h-4 text-brand-mid" />
-            <p className="section-label mb-0">{t('settings.shopPhoto')}</p>
-          </div>
-          <p className="text-xs text-gray-500 -mt-1">
-            {t('settings.shopPhotoDesc')}
-          </p>
-
-          {/* Current / new photo preview */}
-          {(photoPreview || shop?.shopPhotoUrl) ? (
-            <div className="flex items-start gap-4">
-              <div className="relative">
-                <img
-                  src={photoPreview || shop?.shopPhotoUrl}
-                  alt="Shop Photo"
-                  className="w-28 h-28 object-cover rounded-xl border border-gray-200 bg-white"
-                />
-                {photoPreview && (
-                  /* New file selected — show clear button */
-                  <button
-                    onClick={clearPhotoPick}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 text-white rounded-full flex items-center justify-center shadow"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <div className="flex-1 space-y-2">
-                {photoPreview ? (
-                  <>
-                    <p className="text-xs text-gray-500">{photoFile?.name}</p>
-                    <button
-                      className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
-                      onClick={handlePhotoUpload}
-                      disabled={photoUploading}
-                    >
-                      {photoUploading
-                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        : photoSaved
-                        ? <CheckCircle className="w-4 h-4" />
-                        : <Upload className="w-4 h-4" />}
-                      {photoUploading ? t('settings.uploading') : photoSaved ? t('settings.savedShort') : t('settings.savePhoto')}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-xs text-green-600 font-semibold">{t('settings.shopPhotoSet')}</p>
-                    <button
-                      className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      {t('settings.replacePhoto')}
-                    </button>
-                    <button
-                      className="w-full text-xs text-red-400 font-medium py-1"
-                      onClick={handlePhotoRemove}
-                    >
-                      {t('settings.removePhoto')}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* No photo yet */
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
-            >
-              <Upload className="w-6 h-6" />
-              <span className="text-sm font-medium">{t('settings.uploadPhotoBtn')}</span>
-              <span className="text-xs">{t('settings.uploadPhotoHint')}</span>
-            </button>
-          )}
-
-          {photoError && <p className="text-red-500 text-sm">{photoError}</p>}
-
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg"
-            className="hidden"
-            onChange={handlePhotoPick}
-          />
-        </div>
-
-        {/* ── Payment QR Code ── */}
-        <div className="card space-y-3">
-          <div className="flex items-center gap-2">
-            <QrCode className="w-4 h-4 text-brand-mid" />
-            <p className="section-label mb-0">{t('settings.paymentQr')}</p>
-          </div>
-          <p className="text-xs text-gray-500 -mt-1">
-            {t('settings.paymentQrDesc')}
-          </p>
-
-          {/* Current / new QR preview */}
-          {(qrPreview || shop?.qrCodeUrl) ? (
-            <div className="flex items-start gap-4">
-              <div className="relative">
-                <img
-                  src={qrPreview || shop?.qrCodeUrl}
-                  alt="Payment QR"
-                  className="w-28 h-28 object-contain rounded-xl border border-gray-200 bg-white"
-                />
-                {qrPreview && (
-                  /* New file selected — show clear button */
-                  <button
-                    onClick={clearQrPick}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 text-white rounded-full flex items-center justify-center shadow"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <div className="flex-1 space-y-2">
-                {qrPreview ? (
-                  <>
-                    <p className="text-xs text-gray-500">{qrFile?.name}</p>
-                    <button
-                      className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
-                      onClick={handleQrUpload}
-                      disabled={qrUploading}
-                    >
-                      {qrUploading
-                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        : qrSaved
-                        ? <CheckCircle className="w-4 h-4" />
-                        : <Upload className="w-4 h-4" />}
-                      {qrUploading ? t('settings.uploading') : qrSaved ? t('settings.savedShort') : t('settings.saveQr')}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-xs text-green-600 font-semibold">{t('settings.qrSet')}</p>
-                    <button
-                      className="w-full border border-dashed border-gray-300 rounded-xl py-2 text-xs text-gray-500 font-medium"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      {t('settings.replaceQr')}
-                    </button>
-                    <button
-                      className="w-full text-xs text-red-400 font-medium py-1"
-                      onClick={handleQrRemove}
-                    >
-                      {t('settings.removeQr')}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* No QR yet */
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-300 rounded-2xl py-5 flex flex-col items-center gap-2 text-gray-400 active:bg-brand-light"
-            >
-              <Upload className="w-6 h-6" />
-              <span className="text-sm font-medium">{t('settings.uploadQrBtn')}</span>
-              <span className="text-xs">{t('settings.uploadQrHint')}</span>
-            </button>
-          )}
-
-          {qrError && <p className="text-red-500 text-sm">{qrError}</p>}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg"
-            className="hidden"
-            onChange={handleQrPick}
-          />
-        </div>
-
         {/* ── Account ── */}
         <div className="card">
           <p className="text-sm text-gray-500 mb-1">{t('settings.signedInAs')}</p>
@@ -696,37 +699,15 @@ export default function Settings() {
 
       </div>
 
-      {/* ── Confirm modals ── */}
-      {confirmDialog === 'removeQr' && (
-        <ConfirmModal
-          title="Remove payment QR?"
-          body="Your bill PDFs will show only the UPI ID text. You can re-upload anytime."
-          confirmLabel="Remove QR"
-          cancelLabel="Keep QR"
-          onConfirm={doQrRemove}
-          onCancel={() => setConfirmDialog(null)}
-        />
-      )}
-      {confirmDialog === 'removePhoto' && (
-        <ConfirmModal
-          title="Remove shop photo?"
-          body="Your bill PDFs won't show a shop photo. You can re-upload anytime."
-          confirmLabel="Remove photo"
-          cancelLabel="Keep photo"
-          onConfirm={doPhotoRemove}
-          onCancel={() => setConfirmDialog(null)}
-        />
-      )}
-      {confirmDialog === 'logout' && (
-        <ConfirmModal
-          title="Sign out?"
-          body="You'll need to enter your phone number and OTP to sign back in."
-          confirmLabel="Sign out"
-          cancelLabel="Stay signed in"
-          onConfirm={doLogout}
-          onCancel={() => setConfirmDialog(null)}
-        />
-      )}
+      <ConfirmSheet
+        open={Boolean(confirmConfig)}
+        title={confirmConfig?.title}
+        body={confirmConfig?.body}
+        confirmLabel={confirmConfig?.confirmLabel}
+        cancelLabel={confirmConfig?.cancelLabel}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </Layout>
   );
 }

@@ -7,6 +7,8 @@ import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
+import StatusBadge from '../components/StatusBadge';
+import StickyActionBar from '../components/StickyActionBar';
 import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
@@ -506,7 +508,7 @@ export default function EstimateDetail() {
               <p className="text-sm text-gray-500">{fmtDate(bill.createdAt)}</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="badge-estimate text-sm px-3 py-1">ESTIMATE</span>
+              <StatusBadge variant="estimate" size="md">Estimate</StatusBadge>
               {isDraft && !editMode && (
                 <button
                   className="p-2 rounded-xl bg-brand-light text-brand-mid active:scale-95"
@@ -736,10 +738,7 @@ export default function EstimateDetail() {
 
       {/* Footer actions (only when not in edit mode) */}
       {isDraft && !editMode && (
-        <div
-          className="fixed left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 p-4 space-y-2 z-10"
-          style={{ bottom: 'var(--bottom-nav-offset)' }}
-        >
+        <StickyActionBar className="space-y-2">
           <div className="flex gap-2">
             <button
               className="btn-primary flex-1 flex items-center justify-center gap-2"
@@ -766,7 +765,7 @@ export default function EstimateDetail() {
             {converting ? t('estimate.converting') : t('estimate.convertToBill')}
             <ArrowRight className="w-4 h-4" />
           </button>
-        </div>
+        </StickyActionBar>
       )}
     </Layout>
   );

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,18 +9,28 @@ import i18n from '../i18n/index';
 
 const LANG_NAMES = { en: 'English', hi: 'हिंदी', te: 'తెలుగు' };
 
-export default function Layout({ children, title, showBack = false }) {
+// Detect iOS device
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+export default function Layout({
+  children,
+  title,
+  showBack = false,
+  showNav = true,
+  showLanguage = true,
+  headerRight = null,
+  onBack,
+  titleNode = null,
+}) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { language, setLanguage } = useStore();
+  const chromeIsDark = false;
+  const showHeaderTitle = !showNav;
 
-  // Toast state for language-change confirmation
   const [langToast, setLangToast] = useState('');
   const [toastTimer, setToastTimer] = useState(null);
-  const [bottomNavOffset, setBottomNavOffset] = useState('72px');
-  const shellRef = useRef(null);
-  const navRef = useRef(null);
 
   const tabs = [
     { path: '/',          icon: LayoutDashboard, labelKey: 'dashboard.today'   },
@@ -34,7 +44,6 @@ export default function Layout({ children, title, showBack = false }) {
     const next = langs[(langs.indexOf(language) + 1) % langs.length];
     setLanguage(next);
     i18n.changeLanguage(next);
-    // Show a brief toast confirming the new language
     setLangToast(LANG_NAMES[next]);
     if (toastTimer) clearTimeout(toastTimer);
     const timerId = setTimeout(() => setLangToast(''), 2000);
@@ -42,140 +51,169 @@ export default function Layout({ children, title, showBack = false }) {
   }, [language, setLanguage, toastTimer]);
 
   const langLabel = { en: 'EN', hi: 'हि', te: 'తె' };
+  const shellBackground = chromeIsDark ? '#0b0b0b' : '#F5F0EB';
 
   useEffect(() => {
-    const updateBottomNavOffset = () => {
-      const navHeight = navRef.current?.getBoundingClientRect?.().height;
-      if (!navHeight) return;
-      setBottomNavOffset(`${Math.ceil(navHeight)}px`);
-    };
+    const root = document.getElementById('root');
+    const previousHtml = document.documentElement.style.backgroundColor;
+    const previousBody = document.body.style.backgroundColor;
+    const previousRoot = root?.style.backgroundColor || '';
 
-    updateBottomNavOffset();
-
-    const resizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(updateBottomNavOffset)
-      : null;
-
-    if (resizeObserver && navRef.current) resizeObserver.observe(navRef.current);
-    window.addEventListener('resize', updateBottomNavOffset);
-    window.visualViewport?.addEventListener('resize', updateBottomNavOffset);
+    document.documentElement.style.backgroundColor = shellBackground;
+    document.body.style.backgroundColor = shellBackground;
+    if (root) {
+      root.style.backgroundColor = shellBackground;
+    }
 
     return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener('resize', updateBottomNavOffset);
-      window.visualViewport?.removeEventListener('resize', updateBottomNavOffset);
+      document.documentElement.style.backgroundColor = previousHtml;
+      document.body.style.backgroundColor = previousBody;
+      if (root) {
+        root.style.backgroundColor = previousRoot;
+      }
     };
-  }, []);
+  }, [shellBackground]);
+
+  const handleBack = onBack || (() => navigate(-1));
+  
+  const resolvedHeaderRight = headerRight ?? (showLanguage ? (
+    <button
+      onClick={cycleLang}
+      className="flex items-center gap-1 bg-brand-mid px-2.5 py-1 rounded-lg text-[11px] font-bold"
+      aria-label={`Switch language — current: ${langLabel[language]}`}
+    >
+      <Globe className="w-3.5 h-3.5" />
+      {langLabel[language]}
+    </button>
+  ) : (
+    <div className="w-[52px]" />
+  ));
+
+  const resolvedTitleNode = titleNode || (
+    <h1 className={`flex-1 text-lg font-display tracking-wider truncate uppercase ${chromeIsDark ? 'text-white' : 'text-brand-dark'}`}>
+      {title || t('appName')}
+    </h1>
+  );
 
   return (
-    <div
-      ref={shellRef}
-      className="app-shell flex flex-col max-w-lg mx-auto w-full"
-      style={{
-        backgroundColor: '#F5F0EB',
-        '--bottom-nav-safe': 'max(env(safe-area-inset-bottom), 4px)',
-        '--bottom-nav-offset': bottomNavOffset,
-      }}
-    >
-      {/* Top bar
-          — style paddingTop uses env(safe-area-inset-top) so the header
-            sits below the Dynamic Island / notch on any iPhone model.
-            The inner content always gets 12px (py-3) below the safe area. */}
+    <>
+      {!showNav ? (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 bg-[#F5F0EB] pointer-events-none"
+        />
+      ) : null}
+
+      <div
+        className="app-shell relative z-0 flex flex-col w-full max-w-lg mx-auto"
+        style={{
+          backgroundColor: '#F5F0EB',
+        }}
+      >
+      {/* HEADER */}
       <header
-        className="bg-brand-dark text-white px-4 flex items-center gap-3 sticky top-0 z-20 shadow-md"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
+        className={`px-3 flex items-center gap-3 sticky top-0 z-20 flex-shrink-0 ${
+          chromeIsDark
+            ? 'bg-brand-dark text-white shadow-md'
+            : 'bg-[#F5F0EB] text-brand-dark'
+        }`}
+        style={{
+          paddingTop: 'var(--safe-top)',
+          minHeight: 'var(--header-total-height)',
+        }}
       >
         {showBack ? (
           <button
-            onClick={() => navigate(-1)}
-            className="p-1 -ml-1 rounded-lg active:bg-brand-mid"
+            onClick={handleBack}
+            className={`p-1 -ml-1 rounded-lg ${chromeIsDark ? 'active:bg-brand-mid' : 'active:bg-brand-light'}`}
             aria-label={t('common.back')}
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
         ) : (
-          <div className="w-7" />
+          <div className={showHeaderTitle ? 'w-7' : 'flex-1'} />
         )}
-        <h1 className="flex-1 text-xl font-display tracking-wider truncate uppercase">
-          {title || t('appName')}
-        </h1>
-        <button
-          onClick={cycleLang}
-          className="flex items-center gap-1 bg-brand-mid px-2 py-1 rounded-lg text-xs font-bold"
-          aria-label={`Switch language — current: ${langLabel[language]}`}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          {langLabel[language]}
-        </button>
+        {showHeaderTitle ? (
+          <div className="flex-1 min-w-0">
+            {resolvedTitleNode}
+          </div>
+        ) : null}
+        {resolvedHeaderRight}
       </header>
 
-      {/* Language-change toast — briefly confirms which language was selected */}
+      {/* LANGUAGE TOAST */}
       {langToast && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-brand-dark text-white
+          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50
                      text-sm font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none
-                     animate-fade-in-out"
-          style={{ marginTop: 'env(safe-area-inset-top)' }}
+                     animate-fade-in-out ${chromeIsDark ? 'bg-brand-dark text-white' : 'bg-white text-brand-dark border border-[#E8DED3]'}`}
+          style={{ marginTop: 'var(--safe-top)' }}
         >
           {langToast}
         </div>
       )}
 
-      {/* Page content
-          — pb uses safe-area-inset-bottom so content never hides behind
-            the bottom nav + iOS home indicator.
-          — overscrollBehaviorY: 'contain' prevents iOS rubber-band scroll
-            from intercepting taps when the page is at its scroll boundary.
-            Without this, tapping a button at the very top/bottom of a page
-            sometimes triggers the bounce animation instead of the tap.
-          — The max() fallback ensures at least 8px bottom gap on Android OEM
-            skins (Samsung, OnePlus, Xiaomi) that return 0 for safe-area-inset-bottom
-            even when gesture navigation is active. */}
-      {/*
-        min-h-0 is critical here. Flex items default to min-height: auto, which lets
-        them grow to fit their content — so overflow-y: auto never triggers and the body
-        ends up scrolling instead.
-        min-h-0 overrides that default, giving <main> a constrained height so it
-        becomes the real scroll container. overscroll-behavior-y: contain then works
-        correctly on this actual scroll container.
-      */}
+      {/* MAIN CONTENT */}
       <main
-        className="flex-1 min-h-0 overflow-y-auto"
+        className="flex-1 min-h-0 overflow-y-auto w-full"
         style={{
-          paddingBottom: 'calc(var(--bottom-nav-offset) + 16px)',
+          paddingBottom: showNav ? 'var(--page-bottom-padding)' : 'var(--screen-page-bottom)',
           overscrollBehaviorY: 'contain',
-          WebkitOverflowScrolling: 'touch', // momentum scrolling on older iOS
+          WebkitOverflowScrolling: 'touch',
         }}
       >
-        {children}
+        <div className="p-3">
+          {children}
+        </div>
       </main>
 
-      {/* Bottom nav
-          — max() fallback: guarantees ≥8px bottom padding on Android OEMs
-            that report safe-area-inset-bottom = 0 in PWA mode, which would
-            otherwise place the nav tabs inside the OS gesture zone. */}
-      <nav
-        ref={navRef}
-        className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto flex z-20"
-        style={{ backgroundColor: '#0b0b0b', paddingBottom: 'var(--bottom-nav-safe)' }}
-      >
-        {tabs.map(({ path, icon: Icon, labelKey }) => {
-          const active = location.pathname === path;
-          return (
-            <Link
-              key={path}
-              to={path}
-              className={`flex-1 flex flex-col items-center py-2 text-xs font-medium transition-colors
-                ${active
-                  ? 'text-brand-mid border-t-2 border-brand-mid -mt-px'
-                  : 'text-gray-400 hover:text-brand-mid'}`}
-            >
-              <Icon className="w-5 h-5 mb-0.5" />
-              {t(labelKey)}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
+      {/* BOTTOM NAVIGATION */}
+      {showNav && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto z-50"
+          style={{
+            backgroundColor: '#F5F0EB',
+            height: 'var(--nav-total-height)',
+            paddingBottom: 'var(--nav-safe-padding)',
+          }}
+        >
+          {/* Icons Container */}
+          <div 
+            className="flex w-full" 
+            style={{ 
+              height: 'var(--nav-height)',
+              alignItems: 'center',
+            }}
+          >
+            {tabs.map(({ path, icon: Icon, labelKey }) => {
+              const active = location.pathname === path;
+              return (
+                <Link
+                  key={path}
+                  to={path}
+                  className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] leading-tight font-medium transition-colors ${
+                    active
+                      ? 'text-brand-mid'
+                      : 'text-brand-mid/55 hover:text-brand-mid'
+                  }`}
+                  style={{
+                    // iOS: 44px minimum touch target (Apple HIG)
+                    // Android: 40px is fine
+                    minHeight: isIOS ? '44px' : '40px',
+                    padding: '4px 0',
+                  }}
+                >
+                  <Icon
+                    className={`h-[24px] w-[24px] ${active ? 'stroke-[2.5px]' : ''}`}
+                  />
+                  <span>{t(labelKey)}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+      </div>
+    </>
   );
 }

@@ -8,6 +8,7 @@ import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import BillPreviewSheet from '../components/BillPreviewSheet';
 import PdfPreviewModal from '../components/PdfPreviewModal';
+import StickyActionBar from '../components/StickyActionBar';
 import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import { getBillPDFBlob } from '../utils/pdf';
@@ -505,10 +506,7 @@ export default function BillDetail() {
 
       {/* Actions footer */}
       {!isVoid && (
-        <div
-          className="fixed left-0 right-0 max-w-lg mx-auto bg-white border-t p-4 space-y-2 z-10"
-          style={{ bottom: 'var(--bottom-nav-offset)' }}
-        >
+        <StickyActionBar className="space-y-2">
           <div className="flex gap-2">
             <button
               className="btn-primary flex-1 flex items-center justify-center gap-1.5 text-sm"
@@ -533,7 +531,7 @@ export default function BillDetail() {
               {t('bill.voidBill')}
             </button>
           )}
-        </div>
+        </StickyActionBar>
       )}
     </Layout>
   );

@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, Trash2, X, CheckCircle, Lock, Crown, Image, Camera } from 'lucide-react';
+import { Search, Plus, Trash2, X, CheckCircle, Lock, Crown, Camera, ArrowRight } from 'lucide-react';
 import { supabase, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
+import StickyActionBar from '../components/StickyActionBar';
+import InlineNotice from '../components/InlineNotice';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
 import { importCustomerIntoShop, searchSharedDirectory } from '../utils/customerDirectory';
 import { optimizeJobPhoto } from '../utils/jobPhoto';
@@ -14,22 +16,22 @@ import { optimizeJobPhoto } from '../utils/jobPhoto';
 function UpgradeWall({ onUpgrade }) {
   const { t } = useTranslation();
   return (
-    <Layout title={t('estimate.newTitle')}>
+    <Layout title={t('estimate.newTitle')} showNav={false}>
       <div className="flex flex-col items-center justify-center p-6 text-center" style={{ minHeight: 'calc(100vh - 120px)' }}>
         <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Lock className="w-10 h-10 text-amber-600" />
         </div>
-        <h2 className="text-xl font-bold text-brand-dark mb-2">Estimates are a Paid Feature</h2>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">{t('estimate.paidFeatureTitle')}</h2>
         <p className="text-gray-500 text-sm mb-8 max-w-xs">
-          Upgrade to create estimates, manage quotes, and unlock unlimited billing.
+          {t('estimate.paidFeatureBody')}
         </p>
         <div className="space-y-3 w-full max-w-sm">
           <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-            Save 38% • Limited Time Offer
+            {t('estimate.paidFeatureOffer')}
           </div>
           <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
             <Crown className="w-5 h-5" />
-            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+            <span>{t('estimate.paidFeatureCta')}</span>
           </button>
         </div>
       </div>
@@ -49,6 +51,48 @@ const TYPE_EMOJI = {
   bike: '🏍️', scooter: '🛵', moped: '🛵', electric: '⚡',
   auto: '🛺', car: '🚗', truck: '🚛', other: '🚘',
 };
+
+function dismissKeyboard() {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+}
+
+function handleEnterKey(event, action) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  event.currentTarget.blur();
+  dismissKeyboard();
+  if (action) {
+    window.setTimeout(action, 0);
+  }
+}
+
+function selectInputContent(event) {
+  if (typeof event.target.select === 'function') {
+    window.setTimeout(() => event.target.select(), 0);
+  }
+}
+
+function normalizeIntegerInput(value) {
+  const digits = value.replace(/\D/g, '');
+  return digits.replace(/^0+(?=\d)/, '');
+}
+
+function normalizeDecimalInput(value) {
+  let sanitized = value.replace(/[^\d.]/g, '');
+  const firstDot = sanitized.indexOf('.');
+  if (firstDot !== -1) {
+    sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
+  }
+  if (sanitized.startsWith('.')) sanitized = `0${sanitized}`;
+  if (sanitized === '') return '';
+  if (sanitized.includes('.')) {
+    const [intPart, decPart = ''] = sanitized.split('.');
+    return `${intPart.replace(/^0+(?=\d)/, '') || '0'}.${decPart}`;
+  }
+  return sanitized.replace(/^0+(?=\d)/, '');
+}
 
 // ── Customer search / create modal ────────────────────────────────────────────
 // onSelect(customer, vehicle|null) — vehicle is non-null only when a new
@@ -103,7 +147,7 @@ function CustomerModal({ onSelect, onClose }) {
       onSelect(imported.customer, imported.vehicle || null);
     } catch (err) {
       console.error('selectSearchResult error:', err);
-      setCreateError(err.message || 'Could not import customer');
+      setCreateError(err.message || t('customer.importFailed'));
     } finally {
       setImportingId('');
     }
@@ -111,7 +155,7 @@ function CustomerModal({ onSelect, onClose }) {
 
   const createCustomer = async () => {
     if (!newPhone || !newName) return;
-    if (newPhone.length !== 10) { setCreateError('Enter a valid 10-digit number'); return; }
+    if (newPhone.length !== 10) { setCreateError(t('customer.invalidPhone')); return; }
     setCreateError('');
     setLoading(true);
     try {
@@ -168,9 +212,9 @@ function CustomerModal({ onSelect, onClose }) {
     } catch (err) {
       console.error('createCustomer error:', err);
       if (err.code === '23505') {
-        setCreateError('A customer with this number already exists');
+        setCreateError(t('customer.duplicatePhone'));
       } else {
-        setCreateError(err.message || 'Something went wrong');
+        setCreateError(err.message || t('common.error'));
       }
     } finally {
       setLoading(false);
@@ -257,7 +301,7 @@ function CustomerModal({ onSelect, onClose }) {
             );})}
             {createError && <p className="text-red-500 text-sm mt-2">{createError}</p>}
             {q.length >= 3 && results.length === 0 && !loading && (
-              <p className="text-center text-gray-400 text-sm py-4">No customers or vehicles found</p>
+              <p className="text-center text-gray-400 text-sm py-4">{t('customer.searchEmpty')}</p>
             )}
           </>
         ) : (
@@ -279,22 +323,22 @@ function CustomerModal({ onSelect, onClose }) {
             {/* Vehicle details */}
             <div className="border-t border-gray-100 pt-3 mt-1">
               <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1">
-                Vehicle Details
+                {t('estimate.vehicleDetails')}
               </p>
               <p className="text-xs text-gray-400 mb-3">
-                Optional — skip if you don't have the details handy
+                {t('estimate.vehicleDetailsHint')}
               </p>
 
               {/* Reg. number */}
               <div className="mb-3">
-                <label className="section-label">Registration Number</label>
-                <input className="input-field uppercase" placeholder="TS09AB1234"
+                <label className="section-label">{t('vehicle.number')}</label>
+                <input className="input-field uppercase" placeholder={t('vehicle.numberPlaceholder')}
                   value={vNo} onChange={(e) => setVNo(e.target.value)} />
               </div>
 
               {/* Type */}
               <div className="mb-3">
-                <label className="section-label">Vehicle Type</label>
+                <label className="section-label">{t('vehicle.type')}</label>
                 <select className="input-field" value={vType} onChange={handleTypeChange}>
                   {VEHICLE_TYPES.map((vt) => (
                     <option key={vt.value} value={vt.value}>{vt.label}</option>
@@ -304,43 +348,43 @@ function CustomerModal({ onSelect, onClose }) {
 
               {/* Brand */}
               <div className="mb-3">
-                <label className="section-label">Brand</label>
+                <label className="section-label">{t('vehicle.brand')}</label>
                 {brands.length > 0 ? (
                   <>
                     <select className="input-field" value={vBrand} onChange={handleBrandChange}>
-                      <option value="">Select brand</option>
+                      <option value="">{t('vehicle.selectBrand')}</option>
                       {brands.map((b) => <option key={b} value={b}>{b}</option>)}
-                      <option value="__other__">Other (type below)</option>
+                      <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
                     </select>
                     {vBrand === '__other__' && (
-                      <input className="input-field mt-2" placeholder="Enter brand name"
+                      <input className="input-field mt-2" placeholder={t('vehicle.enterBrand')}
                         onChange={(e) => setVBrand(e.target.value)} />
                     )}
                   </>
                 ) : (
-                  <input className="input-field" placeholder="Brand (e.g. Honda)"
+                  <input className="input-field" placeholder={t('vehicle.brandPlaceholder')}
                     value={vBrand} onChange={(e) => setVBrand(e.target.value)} />
                 )}
               </div>
 
               {/* Model */}
               <div>
-                <label className="section-label">Model</label>
+                <label className="section-label">{t('vehicle.model')}</label>
                 {models.length > 0 && vBrand !== '__other__' ? (
                   <>
                     <select className="input-field" value={vModel}
                       onChange={(e) => setVModel(e.target.value)}>
-                      <option value="">Select model</option>
+                      <option value="">{t('vehicle.selectModel')}</option>
                       {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                      <option value="__other__">Other (type below)</option>
+                      <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
                     </select>
                     {vModel === '__other__' && (
-                      <input className="input-field mt-2" placeholder="Enter model name"
+                      <input className="input-field mt-2" placeholder={t('vehicle.enterModel')}
                         onChange={(e) => setVModel(e.target.value)} />
                     )}
                   </>
                 ) : (
-                  <input className="input-field" placeholder="Model (e.g. Activa 6G)"
+                  <input className="input-field" placeholder={t('vehicle.modelPlaceholder')}
                     value={vModel === '__other__' ? '' : vModel}
                     onChange={(e) => setVModel(e.target.value)} />
                 )}
@@ -438,7 +482,7 @@ function PartsModal({ catalogue, onAdd, onClose }) {
                       }`}
                       onClick={() => setCat(c)}
                     >
-                      {c === 'all' ? 'All' : t(`parts.categories.${c}`, { defaultValue: c })}
+                      {t(`parts.categories.${c}`, { defaultValue: c })}
                     </button>
                   ))}
                 </div>
@@ -473,7 +517,7 @@ function PartsModal({ catalogue, onAdd, onClose }) {
           <div className="space-y-3 flex-1">
             <div>
               <label className="section-label">{t('parts.name')} *</label>
-              <input className="input-field" placeholder="Part name"
+              <input className="input-field" placeholder={t('parts.namePlaceholder')}
                 value={custom.name} onChange={(e) => setCustom((c) => ({ ...c, name: e.target.value }))} />
             </div>
             <div className="flex gap-3">
@@ -484,7 +528,7 @@ function PartsModal({ catalogue, onAdd, onClose }) {
               </div>
               <div className="flex-1">
                 <label className="section-label">{t('parts.price')} *</label>
-                <input className="input-field" type="number" inputMode="decimal" placeholder="0"
+                <input className="input-field" type="number" inputMode="decimal" placeholder={t('estimate.labourPlaceholder')}
                   value={custom.price} onChange={(e) => setCustom((c) => ({ ...c, price: e.target.value }))} />
               </div>
             </div>
@@ -494,6 +538,35 @@ function PartsModal({ catalogue, onAdd, onClose }) {
       </div>
     </div>,
     document.body
+  );
+}
+
+function EstimateStepChip({ index, label, active, complete, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-w-0 flex-1 items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-colors ${
+        active
+          ? 'border-brand-mid bg-brand-light text-brand-dark'
+          : complete
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : 'border-gray-200 bg-white text-gray-500'
+      }`}
+    >
+      <span
+        className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+          active
+            ? 'bg-brand-mid text-white'
+            : complete
+              ? 'bg-emerald-500 text-white'
+              : 'bg-gray-100 text-gray-500'
+        }`}
+      >
+        {index + 1}
+      </span>
+      <span className="truncate text-xs font-semibold">{label}</span>
+    </button>
   );
 }
 
@@ -544,12 +617,18 @@ export default function NewEstimate() {
   const [error, setError]       = useState('');
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPartsModal, setShowPartsModal]       = useState(false);
+  const [step, setStep] = useState(0);
 
   // Computed totals
   const partsSubtotal = parts.reduce((s, p) => s + (p.total || 0), 0);
   const cgst          = isGST ? partsSubtotal * 0.09 : 0;
   const sgst          = isGST ? partsSubtotal * 0.09 : 0;
   const grandTotal    = partsSubtotal + (parseFloat(labour) || 0) + cgst + sgst;
+  const steps = [
+    t('estimate.stepDetails'),
+    t('estimate.stepItems'),
+    t('estimate.stepTotals'),
+  ];
 
   // Load parts catalogue on mount
   useEffect(() => {
@@ -624,7 +703,7 @@ export default function NewEstimate() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (PNG/JPG)');
+      setError(t('estimate.photoFileError'));
       return;
     }
     setPhotoPreparing(true);
@@ -690,9 +769,9 @@ export default function NewEstimate() {
 
   // ── Save (estimate OR direct bill) ───────────────────────────────────────
   const handleSave = async () => {
-    if (!customer)          { setError('Please select a customer'); return; }
-    if (parts.length === 0) { setError('Add at least one part or service'); return; }
-    if (IS_NEW && !vehicle.number.trim()) { setError('Vehicle number is required'); return; }
+    if (!customer)          { setError(t('estimate.selectCustomerError')); return; }
+    if (parts.length === 0) { setError(t('estimate.addItemError')); return; }
+    if (IS_NEW && !vehicle.number.trim()) { setError(t('estimate.vehicleRequired')); return; }
 
     setError('');
     setLoading(true);
@@ -815,399 +894,514 @@ export default function NewEstimate() {
 
   const isBill = docMode === 'bill';
 
+  const validateStep = (targetStep = step) => {
+    if (targetStep === 0) {
+      if (!customer) {
+        setError(t('estimate.selectCustomerError'));
+        return false;
+      }
+      if (!selectedVehicleId && !IS_NEW) {
+        setError(t('estimate.selectVehicleError'));
+        return false;
+      }
+      if (IS_NEW && !vehicle.number.trim()) {
+        setError(t('estimate.vehicleRequired'));
+        return false;
+      }
+    }
+
+    if (targetStep === 1 && parts.length === 0) {
+      setError(t('estimate.addItemError'));
+      return false;
+    }
+
+    setError('');
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (!validateStep()) return;
+    setStep((prev) => Math.min(prev + 1, steps.length - 1));
+  };
+
+  const handlePrevStep = () => {
+    setError('');
+    setStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleStepSelect = (targetStep) => {
+    if (targetStep <= step) {
+      setError('');
+      setStep(targetStep);
+      return;
+    }
+    if (!validateStep(step)) return;
+    setStep(targetStep);
+  };
+
   // ── Gate: show upgrade wall if free user tries to create estimate ─────────
   if (shop?.plan !== 'paid' && docMode === 'estimate') {
     return <UpgradeWall onUpgrade={() => navigate('/settings')} />;
   }
 
   return (
-    <Layout title={isBill ? 'New Bill' : t('estimate.newTitle')} showBack>
-      <div className="p-4 space-y-4 pb-32">
-
-        {/* ── Document type toggle ──────────────────────────────────────────── */}
-        <div className="flex gap-1.5 bg-gray-100 p-1.5 rounded-2xl">
+    <Layout title={isBill ? t('estimate.billTitle') : t('estimate.newTitle')} showBack showNav={false}>
+      <div className="space-y-5 p-4 pb-36">
+        <div className="flex gap-1.5 rounded-2xl bg-gray-100 p-1.5">
           <button
-            className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+            className={`flex-1 rounded-xl py-3 text-sm font-bold transition-all ${
               !isBill ? 'bg-white text-brand-dark shadow-sm' : 'text-gray-400'
             }`}
             onClick={() => setDocMode('estimate')}
+            type="button"
           >
-            📋 Estimate
+            {t('estimate.docEstimate')}
           </button>
           <button
-            className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+            className={`flex-1 rounded-xl py-3 text-sm font-bold transition-all ${
               isBill ? 'bg-white text-brand-dark shadow-sm' : 'text-gray-400'
             }`}
             onClick={() => setDocMode('bill')}
+            type="button"
           >
-            🧾 Direct Bill
+            {t('estimate.docBill')}
           </button>
         </div>
 
-        {/* ── Customer section ─────────────────────────────────────────────── */}
-        <div className="card">
-          <p className="section-label">{t('estimate.customer')}</p>
-          {customer ? (
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-light flex items-center justify-center font-bold text-brand-mid">
-                {customer.name?.[0]?.toUpperCase() || '?'}
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold">{customer.name}</p>
-                <p className="text-sm text-gray-500">{customer.phone}</p>
-              </div>
-              <button className="text-xs text-brand-mid font-semibold" onClick={() => setShowCustomerModal(true)}>
-                Change
-              </button>
-            </div>
-          ) : (
-            <button
-              className="w-full border-2 border-dashed border-brand-light rounded-xl py-4 flex items-center justify-center gap-2 text-brand-mid font-semibold"
-              onClick={() => setShowCustomerModal(true)}
-            >
-              <Search className="w-4 h-4" />
-              {t('customer.searchPlaceholder')}
-            </button>
-          )}
+        <div className="grid grid-cols-3 gap-2">
+          {steps.map((label, index) => (
+            <EstimateStepChip
+              key={label}
+              index={index}
+              label={label}
+              active={step === index}
+              complete={step > index}
+              onClick={() => handleStepSelect(index)}
+            />
+          ))}
         </div>
 
-        {/* ── Vehicle section ───────────────────────────────────────────────── */}
-        {customer && (
-          <div className="card space-y-3">
-            <p className="section-label">{t('estimate.vehicle')}</p>
-
-            {vehiclesLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="w-6 h-6 border-2 border-brand-mid border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <>
-                {/* Existing vehicles + New Vehicle chip */}
-                {customerVehicles.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Select vehicle or add new</p>
-                    <div className="flex flex-wrap gap-2">
-                      {customerVehicles.map((v) => (
-                        <button
-                          key={v.id}
-                          onClick={() => setSelectedVehicleId(v.id)}
-                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                            selectedVehicleId === v.id
-                              ? 'bg-brand-mid text-white border-brand-mid'
-                              : 'bg-white text-gray-700 border-gray-200'
-                          }`}
-                        >
-                          <span>{TYPE_EMOJI[v.vehicleType] || '🚘'}</span>
-                          <span className="font-mono">{v.vehicleNo}</span>
-                          {selectedVehicleId === v.id && (
-                            <CheckCircle className="w-3.5 h-3.5 ml-0.5" />
-                          )}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setSelectedVehicleId('__new__')}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                          IS_NEW
-                            ? 'bg-brand-mid text-white border-brand-mid'
-                            : 'bg-white text-gray-700 border-dashed border-gray-200'
-                        }`}
-                      >
-                        <Plus className="w-3.5 h-3.5" /> New Vehicle
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Show selected vehicle details (read-only) */}
-                {activeVehicle && !IS_NEW && (
-                  <div className="bg-brand-light/60 rounded-xl p-3 text-sm">
-                    <p className="font-semibold text-brand-dark font-mono">{activeVehicle.vehicleNo}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">
-                      {[activeVehicle.vehicleBrand, activeVehicle.vehicleModel].filter(Boolean).join(' ')
-                        || activeVehicle.vehicleType || ''}
-                    </p>
-                  </div>
-                )}
-
-                {/* New vehicle form */}
-                {IS_NEW && (
-                  <div className="space-y-3 border-t border-gray-100 pt-3">
-                    {/* Number */}
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.number')} *</label>
-                      <input
-                        className="input-field uppercase"
-                        placeholder={t('vehicle.numberPlaceholder')}
-                        value={vehicle.number}
-                        onChange={(e) => setVehicle((v) => ({ ...v, number: e.target.value }))}
-                      />
-                    </div>
-
-                    {/* Type */}
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.type')}</label>
-                      <select className="input-field" value={vehicle.type} onChange={handleVehicleTypeChange}>
-                        {VEHICLE_TYPES.map((vt) => (
-                          <option key={vt.value} value={vt.value}>
-                            {TYPE_EMOJI[vt.value]} {vt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Brand */}
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.brand')}</label>
-                      {vehicleBrands.length > 0 ? (
-                        <>
-                          <select className="input-field" value={vehicle.brand} onChange={handleVehicleBrandChange}>
-                            <option value="">Select brand</option>
-                            {vehicleBrands.map((b) => <option key={b} value={b}>{b}</option>)}
-                            <option value="__other__">Other</option>
-                          </select>
-                          {vehicle.brand === '__other__' && (
-                            <input className="input-field mt-2" placeholder="Enter brand name"
-                              onChange={(e) => setVehicle((v) => ({ ...v, brand: e.target.value, model: '' }))} />
-                          )}
-                        </>
-                      ) : (
-                        <input className="input-field" placeholder={t('vehicle.brandPlaceholder')}
-                          value={vehicle.brand}
-                          onChange={(e) => setVehicle((v) => ({ ...v, brand: e.target.value }))} />
-                      )}
-                    </div>
-
-                    {/* Model */}
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.model')}</label>
-                      {vehicleModels.length > 0 && vehicle.brand !== '__other__' ? (
-                        <>
-                          <select className="input-field" value={vehicle.model}
-                            onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))}>
-                            <option value="">Select model</option>
-                            {vehicleModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                            <option value="__other__">Other</option>
-                          </select>
-                          {vehicle.model === '__other__' && (
-                            <input className="input-field mt-2" placeholder="Enter model name"
-                              onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))} />
-                          )}
-                        </>
-                      ) : (
-                        <input className="input-field" placeholder={t('vehicle.modelPlaceholder')}
-                          value={vehicle.model === '__other__' ? '' : vehicle.model}
-                          onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))} />
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-t border-gray-100 pt-3">
-                  <label className="text-xs text-gray-500 mb-1 block">{t('vehicle.odoReading')}</label>
-                  <div className="relative">
-                    <input
-                      className="input-field pr-12"
-                      type="tel"
-                      inputMode="numeric"
-                      placeholder={t('vehicle.odoPlaceholder')}
-                      value={odoReading}
-                      onChange={(e) => setOdoReading(e.target.value.replace(/\D/g, ''))}
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-                      {t('vehicle.odoUnit')}
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
+        {step > 0 && customer ? (
+          <div className="card flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-light font-bold text-brand-mid">
+              {customer.name?.[0]?.toUpperCase() || '?'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-brand-dark">{customer.name}</p>
+              <p className="truncate text-xs text-gray-500">
+                {(activeVehicle?.vehicleNo || vehicle.number || t('estimate.vehicle'))}
+                {odoReading ? ` • ${odoReading} ${t('vehicle.odoUnit')}` : ''}
+              </p>
+            </div>
+            <button
+              className="text-xs font-semibold text-brand-mid"
+              onClick={() => setStep(0)}
+              type="button"
+            >
+              {t('common.edit')}
+            </button>
           </div>
-        )}
+        ) : null}
 
-        {/* ── Job Photo section ─────────────────────────────────────────────── */}
-        {customer && (selectedVehicleId || IS_NEW) && (
-          <div className="card space-y-3">
-            <p className="section-label">
-              <Camera className="w-4 h-4 inline mr-1" />
-              Job Photo (Optional)
-            </p>
-            <p className="text-xs text-gray-500 -mt-2">
-              Take a photo of the vehicle before starting work
-            </p>
-            {photoPreparing && (
-              <div className="flex items-center gap-2 text-xs text-brand-mid">
-                <div className="w-3.5 h-3.5 border-2 border-brand-mid border-t-transparent rounded-full animate-spin" />
-                Preparing photo for faster upload...
-              </div>
-            )}
-
-            {jobPhotoPreview ? (
-              <div className="relative">
-                <img
-                  src={jobPhotoPreview}
-                  alt="Job photo preview"
-                  className="w-full h-56 object-cover rounded-xl border-2 border-gray-200"
-                />
+        {step === 0 ? (
+          <>
+            <div className="card">
+              <p className="section-label">{t('estimate.customer')}</p>
+              {customer ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-light font-bold text-brand-mid">
+                    {customer.name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold">{customer.name}</p>
+                    <p className="text-sm text-gray-500">{customer.phone}</p>
+                  </div>
+                  <button className="text-xs font-semibold text-brand-mid" onClick={() => setShowCustomerModal(true)} type="button">
+                    {t('common.edit')}
+                  </button>
+                </div>
+              ) : (
                 <button
-                  className="absolute top-3 right-3 bg-red-500 text-white p-2 rounded-full shadow-lg"
-                  onClick={clearPhoto}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-light py-4 font-semibold text-brand-mid"
+                  onClick={() => setShowCustomerModal(true)}
                   type="button"
                 >
-                  <X className="w-5 h-5" />
+                  <Search className="h-4 w-4" />
+                  {t('customer.searchPlaceholder')}
                 </button>
+              )}
+            </div>
+
+            {customer ? (
+              <div className="card space-y-3">
+                <p className="section-label">{t('estimate.vehicle')}</p>
+
+                {vehiclesLoading ? (
+                  <div className="flex justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-mid border-t-transparent" />
+                  </div>
+                ) : (
+                  <>
+                    {customerVehicles.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs text-gray-500">{t('estimate.vehicleSelectHint')}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {customerVehicles.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => setSelectedVehicleId(v.id)}
+                              type="button"
+                              className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                                selectedVehicleId === v.id
+                                  ? 'border-brand-mid bg-brand-mid text-white'
+                                  : 'border-gray-200 bg-white text-gray-700'
+                              }`}
+                            >
+                              <span>{TYPE_EMOJI[v.vehicleType] || '🚘'}</span>
+                              <span className="font-mono">{v.vehicleNo}</span>
+                              {selectedVehicleId === v.id ? <CheckCircle className="ml-0.5 h-3.5 w-3.5" /> : null}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setSelectedVehicleId('__new__')}
+                            type="button"
+                            className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                              IS_NEW
+                                ? 'border-brand-mid bg-brand-mid text-white'
+                                : 'border-dashed border-gray-200 bg-white text-gray-700'
+                            }`}
+                          >
+                            <Plus className="h-3.5 w-3.5" /> {t('estimate.newVehicle')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeVehicle && !IS_NEW ? (
+                      <div className="rounded-xl bg-brand-light/60 p-3 text-sm">
+                        <p className="font-mono font-semibold text-brand-dark">{activeVehicle.vehicleNo}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {[activeVehicle.vehicleBrand, activeVehicle.vehicleModel].filter(Boolean).join(' ')
+                            || activeVehicle.vehicleType || ''}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {IS_NEW ? (
+                      <div className="space-y-3 border-t border-gray-100 pt-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-gray-500">{t('vehicle.number')} *</label>
+                          <input
+                            className="input-field uppercase"
+                            placeholder={t('vehicle.numberPlaceholder')}
+                            value={vehicle.number}
+                            onChange={(e) => setVehicle((v) => ({ ...v, number: e.target.value }))}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-gray-500">{t('vehicle.type')}</label>
+                          <select className="input-field" value={vehicle.type} onChange={handleVehicleTypeChange}>
+                            {VEHICLE_TYPES.map((vt) => (
+                              <option key={vt.value} value={vt.value}>
+                                {TYPE_EMOJI[vt.value]} {vt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-gray-500">{t('vehicle.brand')}</label>
+                          {vehicleBrands.length > 0 ? (
+                            <>
+                              <select className="input-field" value={vehicle.brand} onChange={handleVehicleBrandChange}>
+                                <option value="">{t('vehicle.selectBrand')}</option>
+                                {vehicleBrands.map((b) => <option key={b} value={b}>{b}</option>)}
+                                <option value="__other__">{t('vehicle.other')}</option>
+                              </select>
+                              {vehicle.brand === '__other__' ? (
+                                <input className="input-field mt-2" placeholder={t('vehicle.enterBrand')}
+                                  onChange={(e) => setVehicle((v) => ({ ...v, brand: e.target.value, model: '' }))} />
+                              ) : null}
+                            </>
+                          ) : (
+                            <input className="input-field" placeholder={t('vehicle.brandPlaceholder')}
+                              value={vehicle.brand}
+                              onChange={(e) => setVehicle((v) => ({ ...v, brand: e.target.value }))} />
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-gray-500">{t('vehicle.model')}</label>
+                          {vehicleModels.length > 0 && vehicle.brand !== '__other__' ? (
+                            <>
+                              <select className="input-field" value={vehicle.model}
+                                onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))}>
+                                <option value="">{t('vehicle.selectModel')}</option>
+                                {vehicleModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                                <option value="__other__">{t('vehicle.other')}</option>
+                              </select>
+                              {vehicle.model === '__other__' ? (
+                                <input className="input-field mt-2" placeholder={t('vehicle.enterModel')}
+                                  onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))} />
+                              ) : null}
+                            </>
+                          ) : (
+                            <input className="input-field" placeholder={t('vehicle.modelPlaceholder')}
+                              value={vehicle.model === '__other__' ? '' : vehicle.model}
+                              onChange={(e) => setVehicle((v) => ({ ...v, model: e.target.value }))} />
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="border-t border-gray-100 pt-3">
+                      <label className="mb-1 block text-xs text-gray-500">{t('vehicle.odoReading')}</label>
+                      <div className="relative">
+                        <input
+                          className="input-field pr-12"
+                          type="tel"
+                          inputMode="numeric"
+                          placeholder={t('vehicle.odoPlaceholder')}
+                          value={odoReading}
+                          onChange={(e) => setOdoReading(e.target.value.replace(/\D/g, ''))}
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                          {t('vehicle.odoUnit')}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            ) : (
-              <button
-                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center gap-3 text-gray-500 hover:border-brand-mid hover:text-brand-mid transition-colors active:bg-gray-50"
-                onClick={() => photoInputRef.current?.click()}
-                type="button"
-              >
-                <Camera className="w-12 h-12" />
-                <div className="text-center">
-                  <span className="text-sm font-medium block">Tap to take photo</span>
-                  <span className="text-xs">Helps track vehicle condition</span>
-                </div>
-              </button>
-            )}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handlePhotoSelect}
-            />
-          </div>
-        )}
+            ) : null}
 
-        {/* ── Parts section ─────────────────────────────────────────────────── */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <p className="section-label mb-0">{t('estimate.parts')}</p>
-            <button
-              className="flex items-center gap-1 bg-brand-mid text-white px-3 py-1.5 rounded-lg text-sm font-semibold"
-              onClick={() => setShowPartsModal(true)}
-            >
-              <Plus className="w-4 h-4" />
-              {t('common.add')}
-            </button>
-          </div>
+            {customer && (selectedVehicleId || IS_NEW) ? (
+              <div className="card space-y-3">
+                <p className="section-label">
+                  <Camera className="mr-1 inline h-4 w-4" />
+                  {t('estimate.jobPhoto')}
+                </p>
+                <p className="-mt-2 text-xs text-gray-500">
+                  {t('estimate.jobPhotoHint')}
+                </p>
+                {photoPreparing ? (
+                  <div className="flex items-center gap-2 text-xs text-brand-mid">
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-mid border-t-transparent" />
+                    {t('estimate.photoPreparing')}
+                  </div>
+                ) : null}
 
-          {parts.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-4">{t('estimate.partsEmpty')}</p>
-          ) : (
-            <div className="space-y-2">
-              {parts.map((part, i) => (
-                <div key={i} className="bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-sm flex-1">
-                      {getPartName(part, language) || part.name}
-                    </p>
-                    <button onClick={() => removePart(i)} className="text-red-400 flex-shrink-0">
-                      <Trash2 className="w-4 h-4" />
+                {jobPhotoPreview ? (
+                  <div className="relative">
+                    <img
+                      src={jobPhotoPreview}
+                      alt="Job photo preview"
+                      className="h-56 w-full rounded-xl border-2 border-gray-200 object-cover"
+                    />
+                    <button
+                      className="absolute right-3 top-3 rounded-full bg-red-500 p-2 text-white shadow-lg"
+                      onClick={clearPhoto}
+                      type="button"
+                    >
+                      <X className="h-5 w-5" />
                     </button>
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400">{t('parts.qty')}</label>
-                      <input
-                        type="number" inputMode="numeric" min="1"
-                        className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm text-center"
-                        value={part.qty}
-                        onChange={(e) => updatePartQty(i, e.target.value)}
-                      />
+                ) : (
+                  <button
+                    className="flex w-full flex-col items-center gap-3 rounded-xl border-2 border-dashed border-gray-300 p-8 text-gray-500 transition-colors hover:border-brand-mid hover:text-brand-mid active:bg-gray-50"
+                    onClick={() => photoInputRef.current?.click()}
+                    type="button"
+                  >
+                    <Camera className="h-12 w-12" />
+                    <div className="text-center">
+                      <span className="block text-sm font-medium">{t('estimate.photoTap')}</span>
+                      <span className="text-xs">{t('estimate.photoHelp')}</span>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400">{t('parts.price')}</label>
-                      <input
-                        type="number" inputMode="decimal"
-                        className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm text-center"
-                        value={part.unitPrice}
-                        onChange={(e) => updatePartPrice(i, e.target.value)}
-                      />
+                  </button>
+                )}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {step === 1 ? (
+          <div className="space-y-4">
+            <div className="card">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="section-label mb-0">{t('estimate.parts')}</p>
+                <button
+                  className="flex items-center gap-1 rounded-lg bg-brand-mid px-3 py-1.5 text-sm font-semibold text-white"
+                  onClick={() => setShowPartsModal(true)}
+                  type="button"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('common.add')}
+                </button>
+              </div>
+
+              {parts.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-400">{t('estimate.partsEmpty')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {parts.map((part, i) => (
+                    <div key={i} className="rounded-xl bg-gray-50 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="flex-1 text-sm font-medium">
+                          {getPartName(part, language) || part.name}
+                        </p>
+                        <button onClick={() => removePart(i)} className="flex-shrink-0 text-red-400" type="button">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-xs text-gray-400">{t('parts.qty')}</label>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min="1"
+                            className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
+                            value={part.qty}
+                            onChange={(e) => updatePartQty(i, e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs text-gray-400">{t('parts.price')}</label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
+                            value={part.unitPrice}
+                            onChange={(e) => updatePartPrice(i, e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs text-gray-400">{t('parts.total')}</label>
+                          <p className="pt-1 text-center text-sm font-bold text-brand-dark">
+                            ₹{part.total.toFixed(0)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400">{t('parts.total')}</label>
-                      <p className="font-bold text-sm text-brand-dark pt-1 text-center">
-                        ₹{part.total.toFixed(0)}
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
 
-        {/* ── Labour & GST ──────────────────────────────────────────────────── */}
-        <div className="card space-y-4">
-          <div>
-            <label className="section-label">{t('estimate.labour')}</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
-              <input
-                type="number" inputMode="decimal"
-                className="input-field pl-7"
-                placeholder={t('estimate.labourPlaceholder')}
-                value={labour}
-                onChange={(e) => setLabour(e.target.value)}
-              />
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <p className="section-label mb-0">{t('estimate.subtotal')}</p>
+                <p className="text-lg font-bold text-brand-dark">₹{partsSubtotal.toFixed(2)}</p>
+              </div>
             </div>
           </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              className={`w-12 h-6 rounded-full transition-colors relative ${isGST ? 'bg-brand-mid' : 'bg-gray-200'}`}
-              onClick={() => setIsGST(!isGST)}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${isGST ? 'translate-x-7' : 'translate-x-1'}`} />
-            </div>
-            <span className="text-sm font-medium">{t('estimate.gstToggle')}</span>
-          </label>
-        </div>
+        ) : null}
 
-        {/* ── Totals ────────────────────────────────────────────────────────── */}
-        <div className="card space-y-2">
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>{t('estimate.subtotal')}</span>
-            <span className="font-medium">₹{partsSubtotal.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>Labour</span>
-            <span className="font-medium">₹{(parseFloat(labour) || 0).toFixed(2)}</span>
-          </div>
-          {isGST && (
-            <>
+        {step === 2 ? (
+          <div className="space-y-4">
+            <div className="card space-y-4">
+              <div>
+                <label className="section-label">{t('estimate.labour')}</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-medium text-gray-500">₹</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    className="input-field pl-7"
+                    placeholder={t('estimate.labourPlaceholder')}
+                    value={labour}
+                    onChange={(e) => setLabour(e.target.value)}
+                  />
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center gap-3">
+                <div
+                  className={`relative h-6 w-12 rounded-full transition-colors ${isGST ? 'bg-brand-mid' : 'bg-gray-200'}`}
+                  onClick={() => setIsGST(!isGST)}
+                >
+                  <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isGST ? 'translate-x-7' : 'translate-x-1'}`} />
+                </div>
+                <span className="text-sm font-medium">{t('estimate.gstToggle')}</span>
+              </label>
+            </div>
+
+            <div className="card space-y-2">
               <div className="flex justify-between text-sm text-gray-600">
-                <span>{t('estimate.cgst')}</span>
-                <span className="font-medium">₹{cgst.toFixed(2)}</span>
+                <span>{t('estimate.subtotal')}</span>
+                <span className="font-medium">₹{partsSubtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
-                <span>{t('estimate.sgst')}</span>
-                <span className="font-medium">₹{sgst.toFixed(2)}</span>
+                <span>{t('estimate.labour')}</span>
+                <span className="font-medium">₹{(parseFloat(labour) || 0).toFixed(2)}</span>
               </div>
-            </>
-          )}
-          <div className="border-t border-gray-200 pt-2 flex justify-between">
-            <span className="font-bold text-brand-dark">{t('estimate.grandTotal')}</span>
-            <span className="font-bold text-xl text-brand-dark">₹{grandTotal.toFixed(2)}</span>
+              {isGST ? (
+                <>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>{t('estimate.cgst')}</span>
+                    <span className="font-medium">₹{cgst.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>{t('estimate.sgst')}</span>
+                    <span className="font-medium">₹{sgst.toFixed(2)}</span>
+                  </div>
+                </>
+              ) : null}
+              <div className="flex justify-between border-t border-gray-200 pt-2">
+                <span className="font-bold text-brand-dark">{t('estimate.grandTotal')}</span>
+                <span className="text-xl font-bold text-brand-dark">₹{grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        <button
-          className={`w-full py-4 text-lg font-bold rounded-2xl transition-all active:scale-95 ${
-            isBill
-              ? 'bg-accent text-white'
-              : 'btn-primary'
-          }`}
-          onClick={handleSave}
-          disabled={loading}
-        >
-          {loading
-            ? t('estimate.saving')
-            : isBill ? '🧾 Save Bill' : t('estimate.saveEstimate')}
-        </button>
+        {error ? (
+          <InlineNotice tone="danger" compact>
+            {error}
+          </InlineNotice>
+        ) : null}
       </div>
+
+      <StickyActionBar anchor="screen">
+        <div className="flex gap-3">
+          {step > 0 ? (
+            <button type="button" className="btn-secondary flex-1" onClick={handlePrevStep} disabled={loading}>
+              {t('common.back')}
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className={`${step === steps.length - 1
+              ? (isBill ? 'bg-accent text-white' : 'btn-primary')
+              : 'btn-primary'} flex-1 py-4 text-sm font-bold`}
+            onClick={step === steps.length - 1 ? handleSave : handleNextStep}
+            disabled={loading}
+          >
+            {loading ? t('estimate.saving') : step === 0 ? (
+              <span className="inline-flex items-center gap-2">
+                {t('estimate.continueToItems')}
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            ) : step === 1 ? (
+              <span className="inline-flex items-center gap-2">
+                {t('estimate.continueToTotals')}
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            ) : (
+              isBill ? t('estimate.saveBill') : t('estimate.saveEstimate')
+            )}
+          </button>
+        </div>
+      </StickyActionBar>
 
       {showCustomerModal && (
         <CustomerModal
