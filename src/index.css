@@ -24,7 +24,7 @@
   /* Navigation - More Compact */
   --nav-height: 44px;
 
-  --nav-safe-padding: calc(var(--safe-bottom) * 0.25); /* Only 30% of safe area */
+  --nav-safe-padding: calc(var(--safe-bottom) * 0); /* Only 30% of safe area */
   --nav-total-height: calc(var(--nav-height) + var(--nav-safe-padding));
 
   /* Header */

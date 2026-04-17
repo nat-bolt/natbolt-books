@@ -52,48 +52,6 @@ const TYPE_EMOJI = {
   auto: '🛺', car: '🚗', truck: '🚛', other: '🚘',
 };
 
-function dismissKeyboard() {
-  if (document.activeElement instanceof HTMLElement) {
-    document.activeElement.blur();
-  }
-}
-
-function handleEnterKey(event, action) {
-  if (event.key !== 'Enter') return;
-  event.preventDefault();
-  event.currentTarget.blur();
-  dismissKeyboard();
-  if (action) {
-    window.setTimeout(action, 0);
-  }
-}
-
-function selectInputContent(event) {
-  if (typeof event.target.select === 'function') {
-    window.setTimeout(() => event.target.select(), 0);
-  }
-}
-
-function normalizeIntegerInput(value) {
-  const digits = value.replace(/\D/g, '');
-  return digits.replace(/^0+(?=\d)/, '');
-}
-
-function normalizeDecimalInput(value) {
-  let sanitized = value.replace(/[^\d.]/g, '');
-  const firstDot = sanitized.indexOf('.');
-  if (firstDot !== -1) {
-    sanitized = sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
-  }
-  if (sanitized.startsWith('.')) sanitized = `0${sanitized}`;
-  if (sanitized === '') return '';
-  if (sanitized.includes('.')) {
-    const [intPart, decPart = ''] = sanitized.split('.');
-    return `${intPart.replace(/^0+(?=\d)/, '') || '0'}.${decPart}`;
-  }
-  return sanitized.replace(/^0+(?=\d)/, '');
-}
-
 // ── Customer search / create modal ────────────────────────────────────────────
 // onSelect(customer, vehicle|null) — vehicle is non-null only when a new
 // customer is created AND a vehicle number was provided in the form.
@@ -524,12 +482,14 @@ function PartsModal({ catalogue, onAdd, onClose }) {
               <div className="flex-1">
                 <label className="section-label">{t('parts.qty')}</label>
                 <input className="input-field" type="number" inputMode="numeric" min="1"
-                  value={custom.qty} onChange={(e) => setCustom((c) => ({ ...c, qty: e.target.value }))} />
+                  value={custom.qty} onChange={(e) => setCustom((c) => ({ ...c, qty: e.target.value }))}
+                  onKeyDown={handleEnterDismissKeyboard} />
               </div>
               <div className="flex-1">
                 <label className="section-label">{t('parts.price')} *</label>
                 <input className="input-field" type="number" inputMode="decimal" placeholder={t('estimate.labourPlaceholder')}
-                  value={custom.price} onChange={(e) => setCustom((c) => ({ ...c, price: e.target.value }))} />
+                  value={custom.price} onChange={(e) => setCustom((c) => ({ ...c, price: e.target.value }))}
+                  onKeyDown={handleEnterDismissKeyboard} />
               </div>
             </div>
             <button className="btn-accent w-full" onClick={addCustom}>{t('common.add')}</button>
@@ -908,6 +868,10 @@ export default function NewEstimate() {
         setError(t('estimate.vehicleRequired'));
         return false;
       }
+      if (!odoReading.trim()) {
+        setError(t('estimate.odoReadingRequired'));
+        return false;
+      }
     }
 
     if (targetStep === 1 && parts.length === 0) {
@@ -917,6 +881,13 @@ export default function NewEstimate() {
 
     setError('');
     return true;
+  };
+
+  const handleEnterDismissKeyboard = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
   };
 
   const handleNextStep = () => {
@@ -1096,6 +1067,7 @@ export default function NewEstimate() {
                             placeholder={t('vehicle.numberPlaceholder')}
                             value={vehicle.number}
                             onChange={(e) => setVehicle((v) => ({ ...v, number: e.target.value }))}
+                            onKeyDown={handleEnterDismissKeyboard}
                           />
                         </div>
 
@@ -1156,15 +1128,17 @@ export default function NewEstimate() {
                     ) : null}
 
                     <div className="border-t border-gray-100 pt-3">
-                      <label className="mb-1 block text-xs text-gray-500">{t('vehicle.odoReading')}</label>
+                      <label className="mb-1 block text-xs text-gray-500">{t('vehicle.odoReading')} <span className="text-red-500">*</span></label>
                       <div className="relative">
                         <input
                           className="input-field pr-12"
                           type="tel"
                           inputMode="numeric"
+                          enterKeyHint="done"
                           placeholder={t('vehicle.odoPlaceholder')}
                           value={odoReading}
                           onChange={(e) => setOdoReading(e.target.value.replace(/\D/g, ''))}
+                          onKeyDown={handleEnterDismissKeyboard}
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
                           {t('vehicle.odoUnit')}
@@ -1253,7 +1227,7 @@ export default function NewEstimate() {
               ) : (
                 <div className="space-y-2">
                   {parts.map((part, i) => (
-                    <div key={i} className="rounded-xl bg-gray-50 p-3">
+                    <div key={i} className="rounded-2xl border border-gray-100 bg-white p-2">
                       <div className="flex items-start justify-between gap-2">
                         <p className="flex-1 text-sm font-medium">
                           {getPartName(part, language) || part.name}
@@ -1262,8 +1236,8 @@ export default function NewEstimate() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="mt-2 flex gap-2">
-                        <div className="flex-1">
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                        <div>
                           <label className="text-xs text-gray-400">{t('parts.qty')}</label>
                           <input
                             type="number"
@@ -1272,19 +1246,22 @@ export default function NewEstimate() {
                             className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
                             value={part.qty}
                             onChange={(e) => updatePartQty(i, e.target.value)}
+                            onKeyDown={handleEnterDismissKeyboard}
                           />
                         </div>
-                        <div className="flex-1">
+                        <div>
                           <label className="text-xs text-gray-400">{t('parts.price')}</label>
                           <input
-                            type="number"
+                            type="tel"
                             inputMode="decimal"
+                            enterKeyHint="done"
                             className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
-                            value={part.unitPrice}
-                            onChange={(e) => updatePartPrice(i, e.target.value)}
+                            value={part.unitPrice === 0 ? '' : part.unitPrice}
+                            onChange={(e) => updatePartPrice(i, e.target.value === '0' ? '' : e.target.value)}
+                            onKeyDown={handleEnterDismissKeyboard}
                           />
                         </div>
-                        <div className="flex-1">
+                        <div>
                           <label className="text-xs text-gray-400">{t('parts.total')}</label>
                           <p className="pt-1 text-center text-sm font-bold text-brand-dark">
                             ₹{part.total.toFixed(0)}
@@ -1314,12 +1291,14 @@ export default function NewEstimate() {
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-medium text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="tel"
                     inputMode="decimal"
+                    enterKeyHint="done"
                     className="input-field pl-7"
                     placeholder={t('estimate.labourPlaceholder')}
                     value={labour}
                     onChange={(e) => setLabour(e.target.value)}
+                    onKeyDown={handleEnterDismissKeyboard}
                   />
                 </div>
               </div>
@@ -1373,7 +1352,7 @@ export default function NewEstimate() {
       <StickyActionBar anchor="screen">
         <div className="flex gap-3">
           {step > 0 ? (
-            <button type="button" className="btn-secondary flex-1" onClick={handlePrevStep} disabled={loading}>
+            <button type="button" className="btn-secondary flex-1 whitespace-nowrap" onClick={handlePrevStep} disabled={loading}>
               {t('common.back')}
             </button>
           ) : null}
@@ -1382,7 +1361,7 @@ export default function NewEstimate() {
             type="button"
             className={`${step === steps.length - 1
               ? (isBill ? 'bg-accent text-white' : 'btn-primary')
-              : 'btn-primary'} flex-1 py-4 text-sm font-bold`}
+              : 'btn-primary'} flex-1 whitespace-nowrap text-sm font-bold`}
             onClick={step === steps.length - 1 ? handleSave : handleNextStep}
             disabled={loading}
           >

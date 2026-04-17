@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, AlertCircle, Camera, Eye } from 'lucide-react';
+import { CheckCircle, AlertCircle, Camera, Eye, Pencil, Plus, Trash2, X, Check } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
@@ -11,9 +11,53 @@ import PdfPreviewModal from '../components/PdfPreviewModal';
 import StickyActionBar from '../components/StickyActionBar';
 import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
+import StatusBadge from '../components/StatusBadge';
 import { getBillPDFBlob } from '../utils/pdf';
 import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
 import { openWhatsApp } from '../utils/whatsapp';
+
+// ── Simple parts picker modal used in edit mode ────────────────────────────────
+function CatalogueModal({ catalogue, onAdd, onClose }) {
+  const [q, setQ] = useState('');
+  const filtered = catalogue.filter(
+    (p) => p.name.toLowerCase().includes(q.toLowerCase())
+  );
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
+      <div
+        className="bg-white w-full max-w-lg mx-auto rounded-t-2xl p-4 max-h-[70vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="font-bold text-brand-dark">Add Part / Service</p>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <input
+          className="input-field mb-3"
+          placeholder="Search parts…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
+        <div className="overflow-y-auto space-y-1">
+          {filtered.map((p) => (
+            <button
+              key={p.id || p.name}
+              className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-brand-light active:bg-brand-light text-left"
+              onClick={() => onAdd(p)}
+            >
+              <span className="text-sm font-medium">{p.name}</span>
+              <span className="text-sm text-brand-mid font-semibold">₹{Number(p.price).toFixed(2)}</span>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-center text-gray-400 text-sm py-6">No parts found</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function BillDetail() {
   const { id }   = useParams();
@@ -37,6 +81,15 @@ export default function BillDetail() {
   const previewAssetsRef = useRef({});
   const awaitingWhatsAppReturnRef = useRef(false);
   const whatsappBackgroundedRef = useRef(false);
+
+  // ── Edit mode state ──────────────────────────────────────────────────────────
+  const [editMode, setEditMode]     = useState(false);
+  const [editItems, setEditItems]   = useState([]);
+  const [editLabour, setEditLabour] = useState('');
+  const [editIsGST, setEditIsGST]   = useState(false);
+  const [catalogue, setCatalogue]   = useState([]);
+  const [showCat, setShowCat]       = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!shop) return;
@@ -193,6 +246,118 @@ export default function BillDetail() {
       .eq('shop_id', shop.id);
 
     if (!error) setBill((b) => ({ ...b, status: 'void' }));
+  };
+
+  // ── Edit mode functions ──────────────────────────────────────────────────────
+  const enterEditMode = async () => {
+    setEditItems(bill.items ? bill.items.map((i) => ({ ...i })) : []);
+    setEditLabour(String(bill.labourCharge || ''));
+    setEditIsGST(bill.isGST || false);
+    setEditMode(true);
+    // Load catalogue in background
+    if (catalogue.length === 0 && shop) {
+      const { data } = await supabase.rpc('get_parts_catalogue', { p_shop_id: shop.id });
+      if (data) setCatalogue(data);
+    }
+  };
+
+  const addEditItem = (part) => {
+    setEditItems((prev) => {
+      const existing = prev.findIndex((p) => p.id === (part.shop_part_id || part.default_part_id || part.id));
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = {
+          ...updated[existing],
+          qty:   updated[existing].qty + 1,
+          total: (updated[existing].qty + 1) * updated[existing].unitPrice,
+        };
+        return updated;
+      }
+      const price = Number(part.price || 0);
+      return [...prev, {
+        id:        part.shop_part_id || part.default_part_id || part.id,
+        name:      part.name,
+        qty:       1,
+        unitPrice: price,
+        total:     price,
+      }];
+    });
+    setShowCat(false);
+  };
+
+  const removeEditItem = (i) => setEditItems((prev) => prev.filter((_, idx) => idx !== i));
+
+  const handleEnterDismissKeyboard = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
+
+  const updateEditQty = (i, qty) => {
+    const n = Math.max(1, parseInt(qty) || 1);
+    setEditItems((prev) => {
+      const updated = [...prev];
+      updated[i] = { ...updated[i], qty: n, total: n * updated[i].unitPrice };
+      return updated;
+    });
+  };
+
+  const updateEditPrice = (i, price) => {
+    const p = parseFloat(price) || 0;
+    setEditItems((prev) => {
+      const updated = [...prev];
+      updated[i] = { ...updated[i], unitPrice: p, total: updated[i].qty * p };
+      return updated;
+    });
+  };
+
+  const editPartsSubtotal = editItems.reduce((s, i) => s + (i.total || 0), 0);
+  const editCgst = editIsGST ? editPartsSubtotal * 0.09 : 0;
+  const editSgst = editIsGST ? editPartsSubtotal * 0.09 : 0;
+  const editGrandTotal = editPartsSubtotal + (parseFloat(editLabour) || 0) + editCgst + editSgst;
+
+  const handleSaveEdit = async () => {
+    if (!bill) return;
+    setSavingEdit(true);
+    try {
+      const labour = parseFloat(editLabour) || 0;
+      const updateData = {
+        items:          editItems,
+        parts_subtotal: editPartsSubtotal,
+        labour_charge:  labour,
+        is_gst:         editIsGST,
+        cgst:           editCgst,
+        sgst:           editSgst,
+        grand_total:    editGrandTotal,
+      };
+
+      // Recalculate balance due for advance bills
+      if (bill.status === 'advance') {
+        updateData.balance_due = Math.max(0, editGrandTotal - bill.paidAmount);
+      }
+
+      const { error } = await supabase
+        .from('bills')
+        .update(updateData)
+        .eq('id', id);
+
+      if (!error) {
+        setBill((b) => ({
+          ...b,
+          items:          editItems,
+          partsSubtotal:  editPartsSubtotal,
+          labourCharge:   labour,
+          isGST:          editIsGST,
+          cgst:           editCgst,
+          sgst:           editSgst,
+          grandTotal:     editGrandTotal,
+          balanceDue:     bill.status === 'advance' ? Math.max(0, editGrandTotal - bill.paidAmount) : b.balanceDue,
+        }));
+        setEditMode(false);
+      }
+    } catch (err) { console.error(err); }
+    finally { setSavingEdit(false); }
   };
 
   const handlePreviewPDF = async () => {
@@ -362,14 +527,26 @@ export default function BillDetail() {
 
         {/* Bill info */}
         <div className="card">
-          <div className="flex justify-between mb-3">
+          <div className="flex justify-between items-start mb-3">
             <div>
               <p className="text-lg font-bold text-brand-dark">{bill.billNumber}</p>
               <p className="text-sm text-gray-500">{fmtDate(bill.createdAt)}</p>
             </div>
-            <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${bill.isGST ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-              {bill.isGST ? 'GST' : 'Non-GST'}
-            </span>
+            <div className="flex items-center gap-2">
+              <StatusBadge variant="bill" size="md">Bill</StatusBadge>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${bill.isGST ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                {bill.isGST ? 'GST' : 'Non-GST'}
+              </span>
+              {(bill.status === 'unpaid' || bill.status === 'advance') && !editMode && (
+                <button
+                  className="p-2 rounded-xl bg-brand-light text-brand-mid active:scale-95"
+                  onClick={enterEditMode}
+                  title="Edit bill"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="space-y-1.5 border-t border-gray-100 pt-3">
             <div className="flex justify-between text-sm">
@@ -408,58 +585,192 @@ export default function BillDetail() {
         )}
 
         {/* Parts */}
-        <div className="card">
-          <p className="section-label">{t('estimate.parts')}</p>
-          {bill.items?.map((item, i) => (
-            <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-100 last:border-0 text-sm">
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-xs text-gray-400">Qty: {item.qty} × ₹{item.unitPrice}</p>
+        {!editMode && (
+          <div className="card">
+            <p className="section-label">{t('estimate.parts')}</p>
+            {bill.items?.map((item, i) => (
+              <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-100 last:border-0 text-sm">
+                <div>
+                  <p className="font-medium">{item.name}</p>
+                  <p className="text-xs text-gray-400">Qty: {item.qty} × ₹{item.unitPrice}</p>
+                </div>
+                <span className="font-semibold">₹{item.total?.toFixed(2)}</span>
               </div>
-              <span className="font-semibold">₹{item.total?.toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Totals */}
-        <div className="card space-y-2">
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>{t('estimate.subtotal')}</span>
-            <span>{fmtCurrency(bill.partsSubtotal)}</span>
+        {!editMode && (
+          <div className="card space-y-2">
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>{t('estimate.subtotal')}</span>
+              <span>{fmtCurrency(bill.partsSubtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Labour</span>
+              <span>{fmtCurrency(bill.labourCharge)}</span>
+            </div>
+            {bill.isGST && (
+              <>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>{t('estimate.cgst')}</span>
+                  <span>{fmtCurrency(bill.cgst)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>{t('estimate.sgst')}</span>
+                  <span>{fmtCurrency(bill.sgst)}</span>
+                </div>
+              </>
+            )}
+            <div className="border-t border-gray-200 pt-2 flex justify-between">
+              <span className="font-bold text-brand-dark">{t('estimate.grandTotal')}</span>
+              <span className="font-bold text-xl text-brand-dark">{fmtCurrency(bill.grandTotal)}</span>
+            </div>
+            {bill.paidAmount > 0 && bill.status !== 'paid' && (
+              <>
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Paid</span>
+                  <span>{fmtCurrency(bill.paidAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-red-600 font-semibold">
+                  <span>Balance Due</span>
+                  <span>{fmtCurrency(bill.balanceDue)}</span>
+                </div>
+              </>
+            )}
           </div>
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>Labour</span>
-            <span>{fmtCurrency(bill.labourCharge)}</span>
-          </div>
-          {bill.isGST && (
-            <>
+        )}
+
+        {/* Edit mode UI */}
+        {editMode && (
+          <>
+            {/* Edit items list */}
+            <div className="card">
+              <div className="flex justify-between items-center mb-3">
+                <p className="section-label mb-0">Parts &amp; Services</p>
+                <button
+                  className="flex items-center gap-1 bg-brand-mid text-white px-3 py-1.5 rounded-lg text-sm font-semibold"
+                  onClick={() => setShowCat(true)}
+                >
+                  <Plus className="w-4 h-4" /> Add
+                </button>
+              </div>
+
+              {editItems.length === 0 && (
+                <p className="text-sm text-gray-400 py-3 text-center">Tap Add to add parts or services</p>
+              )}
+
+              {editItems.map((item, i) => (
+                <div key={i} className="flex flex-col gap-2 py-2 border-b border-gray-100 last:border-0 sm:flex-row sm:items-center sm:gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    <p className="text-xs text-gray-400 truncate">₹{item.unitPrice} each</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-1 shrink-0">
+                    <div className="flex items-center gap-1 rounded-2xl bg-gray-50 p-1">
+                      <button
+                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
+                        onClick={() => updateEditQty(i, item.qty - 1)}
+                      >−</button>
+                      <span className="min-w-[1.5rem] text-center text-sm font-medium">{item.qty}</span>
+                      <button
+                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
+                        onClick={() => updateEditQty(i, item.qty + 1)}
+                      >+</button>
+                    </div>
+                    <input
+                      type="tel"
+                      inputMode="decimal"
+                      enterKeyHint="done"
+                      className="w-20 rounded-xl border border-gray-200 px-2 py-1 text-center text-sm"
+                      value={item.unitPrice === 0 ? '' : item.unitPrice}
+                      onChange={(e) => updateEditPrice(i, e.target.value === '0' ? '' : e.target.value)}
+                      onKeyDown={handleEnterDismissKeyboard}
+                    />
+                    <span className="min-w-[5rem] text-sm font-semibold text-right">₹{item.total?.toFixed(2)}</span>
+                    <button
+                      className="text-red-400 p-1 shrink-0"
+                      onClick={() => removeEditItem(i)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Labour + GST */}
+            <div className="card space-y-3">
+              <div>
+                <label className="section-label">Labour Charges (₹)</label>
+                <input
+                  type="tel"
+                  inputMode="decimal"
+                  className="input-field"
+                  placeholder="0"
+                  value={editLabour}
+                  onChange={(e) => setEditLabour(e.target.value)}
+                  onKeyDown={handleEnterDismissKeyboard}
+                />
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  className={`w-11 h-6 rounded-full transition-colors ${editIsGST ? 'bg-brand-mid' : 'bg-gray-300'}`}
+                  onClick={() => setEditIsGST((g) => !g)}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow mt-0.5 transition-transform ${editIsGST ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`} />
+                </div>
+                <span className="text-sm font-medium">GST Bill (18%)</span>
+              </label>
+            </div>
+
+            {/* Running total */}
+            <div className="card space-y-2">
               <div className="flex justify-between text-sm text-gray-600">
-                <span>{t('estimate.cgst')}</span>
-                <span>{fmtCurrency(bill.cgst)}</span>
+                <span>Parts Subtotal</span>
+                <span>{fmtCurrency(editPartsSubtotal)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
-                <span>{t('estimate.sgst')}</span>
-                <span>{fmtCurrency(bill.sgst)}</span>
+                <span>Labour</span>
+                <span>{fmtCurrency(parseFloat(editLabour) || 0)}</span>
               </div>
-            </>
-          )}
-          <div className="border-t border-gray-200 pt-2 flex justify-between">
-            <span className="font-bold text-brand-dark">{t('estimate.grandTotal')}</span>
-            <span className="font-bold text-xl text-brand-dark">{fmtCurrency(bill.grandTotal)}</span>
-          </div>
-          {bill.paidAmount > 0 && bill.status !== 'paid' && (
-            <>
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Paid</span>
-                <span>{fmtCurrency(bill.paidAmount)}</span>
+              {editIsGST && (
+                <>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>CGST (9%)</span><span>{fmtCurrency(editCgst)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>SGST (9%)</span><span>{fmtCurrency(editSgst)}</span>
+                  </div>
+                </>
+              )}
+              <div className="border-t border-gray-200 pt-2 flex justify-between">
+                <span className="font-bold text-brand-dark">Grand Total</span>
+                <span className="font-bold text-xl text-brand-dark">{fmtCurrency(editGrandTotal)}</span>
               </div>
-              <div className="flex justify-between text-sm text-red-600 font-semibold">
-                <span>Balance Due</span>
-                <span>{fmtCurrency(bill.balanceDue)}</span>
-              </div>
-            </>
-          )}
-        </div>
+            </div>
+
+            {/* Save / Cancel */}
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
+                onClick={() => setEditMode(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-2 flex-grow btn-accent flex items-center justify-center gap-2"
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                <Check className="w-4 h-4" />
+                {savingEdit ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </>
+        )}
 
         {/* UPI QR */}
         {!isVoid && qrUrl && (
@@ -471,41 +782,64 @@ export default function BillDetail() {
           </div>
         )}
 
-        {/* Payment panel */}
-        {payPanel && !isPaid && !isVoid && (
-          <div className="card space-y-3 border-2 border-brand-mid">
-            <p className="font-bold text-brand-dark">{t('bill.collectPayment')}</p>
-            <div className="flex gap-2">
-              {['cash', 'upi', 'advance'].map((m) => (
-                <button key={m}
-                  className={`flex-1 py-2 rounded-xl text-sm font-semibold ${payMode === m ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'}`}
-                  onClick={() => setPayMode(m)}
-                >
-                  {t(`bill.${m}`)}
+        {/* Payment Modal */}
+        {payPanel && !isPaid && !isVoid && !editMode && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPayPanel(false)}>
+            <div
+              className="bg-white w-full max-w-sm mx-auto rounded-2xl p-5 space-y-4 max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-brand-dark text-lg">{t('bill.collectPayment')}</p>
+                <button onClick={() => setPayPanel(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
                 </button>
-              ))}
-            </div>
-            {payMode === 'advance' && (
-              <div>
-                <label className="section-label">{t('bill.paidAmount')}</label>
-                <input
-                  type="number" inputMode="decimal"
-                  className="input-field"
-                  placeholder="0"
-                  value={paidAmt}
-                  onChange={(e) => setPaidAmt(e.target.value)}
-                />
               </div>
-            )}
-            <button className="btn-primary w-full" onClick={handleMarkPayment}>
-              {t('bill.markPaid')}
-            </button>
+
+              <div className="grid grid-cols-3 gap-2">
+                {['cash', 'upi', 'advance'].map((m) => (
+                  <button key={m}
+                    className={`py-3 rounded-xl text-sm font-semibold transition-colors ${payMode === m ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'}`}
+                    onClick={() => setPayMode(m)}
+                  >
+                    {m === 'cash' ? 'Cash' : m === 'upi' ? 'UPI' : 'Advance'}
+                  </button>
+                ))}
+              </div>
+
+              {payMode === 'advance' && (
+                <div>
+                  <label className="section-label">{t('bill.paidAmount')}</label>
+                  <input
+                    type="tel" inputMode="decimal"
+                    className="input-field"
+                    placeholder="0"
+                    value={paidAmt}
+                    onChange={(e) => setPaidAmt(e.target.value)}
+                    onKeyDown={handleEnterDismissKeyboard}
+                  />
+                </div>
+              )}
+
+              <button className="btn-primary w-full py-4 text-base font-bold" onClick={handleMarkPayment}>
+                {t('bill.markPaid')}
+              </button>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Catalogue picker modal */}
+      {showCat && (
+        <CatalogueModal
+          catalogue={catalogue}
+          onAdd={addEditItem}
+          onClose={() => setShowCat(false)}
+        />
+      )}
+
       {/* Actions footer */}
-      {!isVoid && (
+      {!isVoid && !editMode && (
         <StickyActionBar className="space-y-2">
           <div className="flex gap-2">
             <button
@@ -522,8 +856,8 @@ export default function BillDetail() {
             </button>
           </div>
           {!isPaid && (
-            <button className="btn-primary w-full" onClick={() => setPayPanel(!payPanel)}>
-              {payPanel ? 'Hide Payment' : t('bill.collectPayment')}
+            <button className="btn-primary w-full" onClick={() => setPayPanel(true)}>
+              {t('bill.collectPayment')}
             </button>
           )}
           {!isPaid && (

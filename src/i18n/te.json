@@ -162,6 +162,7 @@
     "selectCustomerError": "దయచేసి కస్టమర్‌ను ఎంచుకోండి",
     "selectVehicleError": "దయచేసి వాహనాన్ని ఎంచుకోండి లేదా కొత్తదాన్ని జోడించండి",
     "vehicleRequired": "వాహన నంబర్ అవసరం",
+    "odoReadingRequired": "ఓడో రీడింగ్ అవసరం",
     "addItemError": "కనీసం ఒక విడిభాగం లేదా సేవను జోడించండి",
     "shareEstimate": "అంచనా షేర్ చేయండి",
     "convertToBill": "బిల్లుగా మార్చండి",

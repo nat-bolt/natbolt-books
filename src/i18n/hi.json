@@ -162,6 +162,7 @@
     "selectCustomerError": "कृपया ग्राहक चुनें",
     "selectVehicleError": "कृपया वाहन चुनें या नया जोड़ें",
     "vehicleRequired": "वाहन नंबर आवश्यक है",
+    "odoReadingRequired": "ओडीओ रीडिंग आवश्यक है",
     "addItemError": "कम से कम एक पुर्जा या सेवा जोड़ें",
     "shareEstimate": "अनुमान शेयर करें",
     "convertToBill": "बिल में बदलें",

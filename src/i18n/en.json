@@ -161,6 +161,7 @@
     "selectCustomerError": "Please select a customer",
     "selectVehicleError": "Please select or add a vehicle",
     "vehicleRequired": "Vehicle number is required",
+    "odoReadingRequired": "ODO reading is required",
     "addItemError": "Add at least one part or service",
     "shareEstimate": "Share Estimate",
     "convertToBill": "Convert to Bill",

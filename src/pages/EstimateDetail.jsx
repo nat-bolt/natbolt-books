@@ -205,6 +205,13 @@ export default function EstimateDetail() {
     }
   };
 
+  const handleEnterDismissKeyboard = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
+
   const addEditItem = (part) => {
     setEditItems((prev) => {
       const existing = prev.findIndex((p) => p.id === (part.shop_part_id || part.default_part_id || part.id));
@@ -236,6 +243,15 @@ export default function EstimateDetail() {
     setEditItems((prev) => {
       const updated = [...prev];
       updated[i] = { ...updated[i], qty: n, total: n * updated[i].unitPrice };
+      return updated;
+    });
+  };
+
+  const updateEditPrice = (i, price) => {
+    const p = parseFloat(price) || 0;
+    setEditItems((prev) => {
+      const updated = [...prev];
+      updated[i] = { ...updated[i], unitPrice: p, total: updated[i].qty * p };
       return updated;
     });
   };
@@ -627,30 +643,40 @@ export default function EstimateDetail() {
               )}
 
               {editItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
-                  <div className="flex-1 min-w-0">
+                <div key={i} className="flex flex-col gap-2 py-2 border-b border-gray-100 last:border-0 sm:flex-row sm:items-center sm:gap-2">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-gray-400">₹{item.unitPrice} each</p>
+                    <p className="text-xs text-gray-400 truncate">₹{item.unitPrice} each</p>
                   </div>
-                  {/* Qty controls */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-1 shrink-0">
+                    <div className="flex items-center gap-1 rounded-2xl bg-gray-50 p-1">
+                      <button
+                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
+                        onClick={() => updateEditQty(i, item.qty - 1)}
+                      >−</button>
+                      <span className="min-w-[1.5rem] text-center text-sm font-medium">{item.qty}</span>
+                      <button
+                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
+                        onClick={() => updateEditQty(i, item.qty + 1)}
+                      >+</button>
+                    </div>
+                    <input
+                      type="tel"
+                      inputMode="decimal"
+                      enterKeyHint="done"
+                      className="w-20 rounded-xl border border-gray-200 px-2 py-1 text-center text-sm"
+                      value={item.unitPrice === 0 ? '' : item.unitPrice}
+                      onChange={(e) => updateEditPrice(i, e.target.value === '0' ? '' : e.target.value)}
+                      onKeyDown={handleEnterDismissKeyboard}
+                    />
+                    <span className="min-w-[5rem] text-sm font-semibold text-right">₹{item.total?.toFixed(2)}</span>
                     <button
-                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 font-bold flex items-center justify-center"
-                      onClick={() => updateEditQty(i, item.qty - 1)}
-                    >−</button>
-                    <span className="w-6 text-center text-sm font-medium">{item.qty}</span>
-                    <button
-                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 font-bold flex items-center justify-center"
-                      onClick={() => updateEditQty(i, item.qty + 1)}
-                    >+</button>
+                      className="text-red-400 p-1 shrink-0"
+                      onClick={() => removeEditItem(i)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  <span className="text-sm font-semibold w-20 text-right shrink-0">₹{item.total?.toFixed(2)}</span>
-                  <button
-                    className="text-red-400 p-1 shrink-0"
-                    onClick={() => removeEditItem(i)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               ))}
             </div>
@@ -660,12 +686,13 @@ export default function EstimateDetail() {
               <div>
                 <label className="section-label">Labour Charges (₹)</label>
                 <input
-                  type="number"
+                  type="tel"
                   inputMode="decimal"
                   className="input-field"
                   placeholder="0"
                   value={editLabour}
                   onChange={(e) => setEditLabour(e.target.value)}
+                  onKeyDown={handleEnterDismissKeyboard}
                 />
               </div>
 

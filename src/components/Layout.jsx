@@ -162,7 +162,7 @@ export default function Layout({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <div className="p-3">
+        <div className="p-1">
           {children}
         </div>
       </main>
