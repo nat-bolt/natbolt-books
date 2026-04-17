@@ -1,62 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Pencil, Plus, Trash2, X, Check, Camera, Eye } from 'lucide-react';
+import { ArrowRight, Pencil, Camera, Eye } from 'lucide-react';
 import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
-import BillPreviewSheet from '../components/BillPreviewSheet';
-import PdfPreviewModal from '../components/PdfPreviewModal';
+import CatalogueModal from '../components/CatalogueModal';
+import DocumentEditPanel from '../components/DocumentEditPanel';
+import DocumentItemsCard from '../components/DocumentItemsCard';
+import DocumentPreviewLayer from '../components/DocumentPreviewLayer';
+import DocumentTotalsCard from '../components/DocumentTotalsCard';
 import StatusBadge from '../components/StatusBadge';
 import StickyActionBar from '../components/StickyActionBar';
-import WhatsAppReturnPrompt from '../components/WhatsAppReturnPrompt';
 import WhatsAppIcon from '../components/WhatsAppIcon';
-import { getBillPDFBlob } from '../utils/pdf';
-import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
+import useDocumentPreviewShare from '../hooks/useDocumentPreviewShare';
+import { optimizeJobPhoto } from '../utils/jobPhoto';
 import { openWhatsApp } from '../utils/whatsapp';
-
-// ── Simple parts picker modal used in edit mode ────────────────────────────────
-function CatalogueModal({ catalogue, onAdd, onClose }) {
-  const [q, setQ] = useState('');
-  const filtered = catalogue.filter(
-    (p) => p.name.toLowerCase().includes(q.toLowerCase())
-  );
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div
-        className="bg-white w-full max-w-lg mx-auto rounded-t-2xl p-4 max-h-[70vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <p className="font-bold text-brand-dark">Add Part / Service</p>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
-        </div>
-        <input
-          className="input-field mb-3"
-          placeholder="Search parts…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          autoFocus
-        />
-        <div className="overflow-y-auto space-y-1">
-          {filtered.map((p) => (
-            <button
-              key={p.id || p.name}
-              className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-brand-light active:bg-brand-light text-left"
-              onClick={() => onAdd(p)}
-            >
-              <span className="text-sm font-medium">{p.name}</span>
-              <span className="text-sm text-brand-mid font-semibold">₹{Number(p.price).toFixed(2)}</span>
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="text-center text-gray-400 text-sm py-6">No parts found</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function EstimateDetail() {
   const { id }   = useParams();
@@ -68,11 +27,6 @@ export default function EstimateDetail() {
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading]   = useState(true);
   const [converting, setConverting] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [pdfPreviewImage, setPdfPreviewImage] = useState('');
-  const [previewAssets, setPreviewAssets] = useState({});
-  const [showWhatsAppReturnPrompt, setShowWhatsAppReturnPrompt] = useState(false);
   const [convertedBillId, setConvertedBillId] = useState('');
 
   // ── Edit mode state ──────────────────────────────────────────────────────────
@@ -83,73 +37,37 @@ export default function EstimateDetail() {
   const [catalogue, setCatalogue]   = useState([]);
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
-  const previewRef = useRef(null);
-  const previewAssetsRef = useRef({});
-  const awaitingWhatsAppReturnRef = useRef(false);
-  const whatsappBackgroundedRef = useRef(false);
+  const [editJobPhotoFile, setEditJobPhotoFile] = useState(null);
+  const [editJobPhotoPreview, setEditJobPhotoPreview] = useState('');
+  const [editJobPhotoRemoved, setEditJobPhotoRemoved] = useState(false);
+  const [photoPreparing, setPhotoPreparing] = useState(false);
+  const photoInputRef = useRef(null);
+  const {
+    pdfLoading,
+    showPdfPreview,
+    pdfPreviewImage,
+    previewAssets,
+    showWhatsAppReturnPrompt,
+    setShowWhatsAppReturnPrompt,
+    previewRef,
+    handlePreviewPDF,
+    handleClosePreview,
+    handleDownloadPreview,
+    handleSharePdfAfterWhatsApp,
+    registerWhatsAppLaunch,
+  } = useDocumentPreviewShare({
+    bill,
+    shop,
+    customer,
+    t,
+    language,
+    filename: `${bill?.estimateNumber || 'estimate'}.pdf`,
+  });
 
   useEffect(() => {
     if (!shop) return;
     loadBill();
   }, [id, shop]);
-
-  useEffect(() => {
-    previewAssetsRef.current = {};
-    setPreviewAssets({});
-  }, [bill?.id, bill?.updatedAt, shop?.id, shop?.updatedAt]);
-
-  useEffect(() => {
-    const maybeShowPrompt = () => {
-      if (awaitingWhatsAppReturnRef.current && whatsappBackgroundedRef.current) {
-        awaitingWhatsAppReturnRef.current = false;
-        whatsappBackgroundedRef.current = false;
-        setShowWhatsAppReturnPrompt(true);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (!awaitingWhatsAppReturnRef.current) return;
-      if (document.visibilityState === 'hidden') {
-        whatsappBackgroundedRef.current = true;
-      } else if (document.visibilityState === 'visible') {
-        maybeShowPrompt();
-      }
-    };
-
-    window.addEventListener('focus', maybeShowPrompt);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('focus', maybeShowPrompt);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  const waitForPreviewRender = () =>
-    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-  const ensurePreviewAssets = async () => {
-    if (!bill || !shop) return {};
-    const cached = previewAssetsRef.current;
-    if (cached.shopPhotoUrl || cached.jobPhotoUrl || cached.qrCodeUrl) return cached;
-
-    const assets = await resolveBillPreviewAssets({ bill, shop });
-    previewAssetsRef.current = assets;
-    setPreviewAssets(assets);
-    await waitForPreviewRender();
-    return assets;
-  };
-
-  const buildPdfParams = (assets = {}) => ({
-    bill: { ...bill, jobPhotoUrl: assets.jobPhotoUrl || bill.jobPhotoUrl },
-    shop: {
-      ...shop,
-      shopPhotoUrl: assets.shopPhotoUrl || shop.shopPhotoUrl,
-      qrCodeUrl: assets.qrCodeUrl || shop.qrCodeUrl,
-    },
-    customer,
-    t,
-    lang: language,
-  });
 
   const loadBill = async () => {
     try {
@@ -197,6 +115,11 @@ export default function EstimateDetail() {
     setEditItems(bill.items ? bill.items.map((i) => ({ ...i })) : []);
     setEditLabour(String(bill.labourCharge || ''));
     setEditIsGST(bill.isGST || false);
+    setEditJobPhotoFile(null);
+    setEditJobPhotoPreview(bill.jobPhotoUrl || '');
+    setEditJobPhotoRemoved(false);
+    setPhotoPreparing(false);
+    if (photoInputRef.current) photoInputRef.current.value = '';
     setEditMode(true);
     // Load catalogue in background
     if (catalogue.length === 0 && shop) {
@@ -256,6 +179,37 @@ export default function EstimateDetail() {
     });
   };
 
+  const handleEditPhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    setPhotoPreparing(true);
+    try {
+      const prepared = await optimizeJobPhoto(file);
+      setEditJobPhotoFile(prepared);
+      setEditJobPhotoRemoved(false);
+      const reader = new FileReader();
+      reader.onload = (event) => setEditJobPhotoPreview(event.target.result);
+      reader.readAsDataURL(prepared);
+    } catch (err) {
+      console.error('Estimate detail photo preparation failed:', err);
+      setEditJobPhotoFile(file);
+      setEditJobPhotoRemoved(false);
+      const reader = new FileReader();
+      reader.onload = (event) => setEditJobPhotoPreview(event.target.result);
+      reader.readAsDataURL(file);
+    } finally {
+      setPhotoPreparing(false);
+    }
+  };
+
+  const handleRemoveEditPhoto = () => {
+    setEditJobPhotoFile(null);
+    setEditJobPhotoPreview('');
+    setEditJobPhotoRemoved(true);
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
   const editPartsSubtotal = editItems.reduce((s, i) => s + (i.total || 0), 0);
   const editCgst = editIsGST ? editPartsSubtotal * 0.09 : 0;
   const editSgst = editIsGST ? editPartsSubtotal * 0.09 : 0;
@@ -266,6 +220,24 @@ export default function EstimateDetail() {
     setSavingEdit(true);
     try {
       const labour = parseFloat(editLabour) || 0;
+      let nextJobPhotoUrl = editJobPhotoRemoved ? null : (bill.jobPhotoUrl || null);
+
+      if (editJobPhotoFile && shop?.id && bill.id) {
+        const ext = editJobPhotoFile.name.split('.').pop().toLowerCase() || 'jpg';
+        const path = `${shop.id}/jobs/${bill.id}.${ext}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('shop-assets')
+          .upload(path, editJobPhotoFile, { upsert: true, contentType: editJobPhotoFile.type });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('shop-assets')
+          .getPublicUrl(uploadData.path);
+
+        nextJobPhotoUrl = publicUrl;
+      }
+
       const { error } = await supabase
         .from('bills')
         .update({
@@ -276,6 +248,7 @@ export default function EstimateDetail() {
           cgst:           editCgst,
           sgst:           editSgst,
           grand_total:    editGrandTotal,
+          job_photo_url:  nextJobPhotoUrl,
         })
         .eq('id', id);
 
@@ -289,96 +262,12 @@ export default function EstimateDetail() {
           cgst:           editCgst,
           sgst:           editSgst,
           grandTotal:     editGrandTotal,
+          jobPhotoUrl:    nextJobPhotoUrl,
         }));
         setEditMode(false);
       }
     } catch (err) { console.error(err); }
     finally { setSavingEdit(false); }
-  };
-
-  // ── PDF / WhatsApp ───────────────────────────────────────────────────────────
-  const handlePreviewPDF = async () => {
-    if (!bill || !shop) return;
-    if (pdfPreviewImage) setPdfPreviewImage('');
-    setShowPdfPreview(true);
-    setPdfLoading(true);
-    try {
-      await ensurePreviewAssets();
-      const previewImage = await generateBillPreviewImage(previewRef.current);
-      setPdfPreviewImage(previewImage);
-    } catch (err) {
-      setShowPdfPreview(false);
-      console.error(err);
-      alert('PDF preview failed. Please try again.');
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  const handleClosePreview = () => {
-    setPdfPreviewImage('');
-    setShowPdfPreview(false);
-  };
-
-  const handleDownloadPreview = async () => {
-    if (!bill || !shop) return;
-    const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
-    setPdfLoading(true);
-    try {
-      const assets = await ensurePreviewAssets();
-      const blob = await getBillPDFBlob(buildPdfParams(assets));
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error(err);
-      alert('PDF download failed. Please try again.');
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  const handleSharePdfAfterWhatsApp = async () => {
-    if (!bill || !shop) return;
-    const filename = `${bill.estimateNumber || 'estimate'}.pdf`;
-    setPdfLoading(true);
-    try {
-      const assets = await ensurePreviewAssets();
-      const blob = await getBillPDFBlob(buildPdfParams(assets));
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      let canShareFile = false;
-      try {
-        canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
-      } catch (_) {}
-
-      if (canShareFile && typeof navigator.share === 'function') {
-        await navigator.share({ files: [file] });
-      } else {
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }
-
-      setShowWhatsAppReturnPrompt(false);
-    } catch (err) {
-      if (err?.name !== 'AbortError') {
-        console.error(err);
-        alert('PDF share failed. Please try again.');
-      }
-    } finally {
-      setPdfLoading(false);
-    }
   };
 
   const handleWhatsApp = () => {
@@ -398,9 +287,7 @@ export default function EstimateDetail() {
       return;
     }
 
-    awaitingWhatsAppReturnRef.current = true;
-    whatsappBackgroundedRef.current = false;
-    setShowWhatsAppReturnPrompt(false);
+    registerWhatsAppLaunch();
     openWhatsApp(phone, msg);
   };
 
@@ -467,37 +354,46 @@ export default function EstimateDetail() {
   const isConverted = bill.status === 'converted';
   const isVoid      = bill.status === 'void';
   const isDraft     = !isConverted && !isVoid;
+  const estimateTotalRows = [
+    { label: t('estimate.subtotal'), value: fmtCurrency(bill.partsSubtotal) },
+    { label: t('estimate.labour'), value: fmtCurrency(bill.labourCharge) },
+    ...(bill.isGST
+      ? [
+          { label: t('estimate.cgst'), value: fmtCurrency(bill.cgst) },
+          { label: t('estimate.sgst'), value: fmtCurrency(bill.sgst) },
+        ]
+      : []),
+  ];
+  const editTotalRows = [
+    { label: t('estimate.subtotal'), value: fmtCurrency(editPartsSubtotal) },
+    { label: t('estimate.labour'), value: fmtCurrency(parseFloat(editLabour) || 0) },
+    ...(editIsGST
+      ? [
+          { label: t('estimate.cgst'), value: fmtCurrency(editCgst) },
+          { label: t('estimate.sgst'), value: fmtCurrency(editSgst) },
+        ]
+      : []),
+  ];
 
   return (
     <Layout showBack title={`${t('estimate.viewTitle')} ${bill.estimateNumber}`}>
-      <PdfPreviewModal
-        open={showPdfPreview}
-        previewImageUrl={pdfPreviewImage}
-        loading={pdfLoading}
-        onClose={handleClosePreview}
-        onDownload={handleDownloadPreview}
+      <DocumentPreviewLayer
+        bill={bill}
+        shop={shop}
+        customer={customer}
+        t={t}
+        language={language}
+        previewAssets={previewAssets}
+        previewRef={previewRef}
+        showPdfPreview={showPdfPreview}
+        pdfPreviewImage={pdfPreviewImage}
+        pdfLoading={pdfLoading}
+        onClosePreview={handleClosePreview}
+        onDownloadPreview={handleDownloadPreview}
+        showWhatsAppReturnPrompt={showWhatsAppReturnPrompt}
+        onSharePdfAfterWhatsApp={handleSharePdfAfterWhatsApp}
+        onCloseWhatsAppPrompt={() => setShowWhatsAppReturnPrompt(false)}
       />
-      <WhatsAppReturnPrompt
-        open={showWhatsAppReturnPrompt}
-        loading={pdfLoading}
-        onAction={handleSharePdfAfterWhatsApp}
-        onClose={() => setShowWhatsAppReturnPrompt(false)}
-      />
-
-      {bill && shop && (
-        <div className="fixed left-[-10000px] top-0 pointer-events-none">
-          <div ref={previewRef}>
-            <BillPreviewSheet
-              bill={bill}
-              shop={shop}
-              customer={customer}
-              t={t}
-              lang={language}
-              previewAssets={previewAssets}
-            />
-          </div>
-        </div>
-      )}
 
       <div className="p-4 space-y-4 pb-36">
 
@@ -576,180 +472,64 @@ export default function EstimateDetail() {
         {/* ── VIEW MODE: Parts ─────────────────────────────────────────────────── */}
         {!editMode && (
           <>
-            <div className="card">
-              <p className="section-label">{t('estimate.parts')}</p>
-              <div className="space-y-2">
-                {(bill.items || []).length === 0 && (
-                  <p className="text-sm text-gray-400 py-2 text-center">No items added</p>
-                )}
-                {(bill.items || []).map((item, i) => (
-                  <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-100 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-gray-400">Qty: {item.qty} × ₹{item.unitPrice}</p>
-                    </div>
-                    <span className="font-semibold text-sm">₹{item.total?.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <DocumentItemsCard
+              title={t('estimate.parts')}
+              items={bill.items || []}
+              emptyText="No items added"
+              qtyLabel={t('parts.qty')}
+            />
 
-            <div className="card space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>{t('estimate.subtotal')}</span>
-                <span>{fmtCurrency(bill.partsSubtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Labour</span>
-                <span>{fmtCurrency(bill.labourCharge)}</span>
-              </div>
-              {bill.isGST && (
-                <>
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>{t('estimate.cgst')}</span>
-                    <span>{fmtCurrency(bill.cgst)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>{t('estimate.sgst')}</span>
-                    <span>{fmtCurrency(bill.sgst)}</span>
-                  </div>
-                </>
-              )}
-              <div className="border-t border-gray-200 pt-2 flex justify-between">
-                <span className="font-bold text-brand-dark">{t('estimate.grandTotal')}</span>
-                <span className="font-bold text-xl text-brand-dark">{fmtCurrency(bill.grandTotal)}</span>
-              </div>
-            </div>
+            <DocumentTotalsCard
+              rows={estimateTotalRows}
+              grandTotalLabel={t('estimate.grandTotal')}
+              grandTotalValue={fmtCurrency(bill.grandTotal)}
+            />
           </>
         )}
 
         {/* ── EDIT MODE ────────────────────────────────────────────────────────── */}
         {editMode && (
           <>
-            {/* Edit items list */}
-            <div className="card">
-              <div className="flex justify-between items-center mb-3">
-                <p className="section-label mb-0">Parts &amp; Services</p>
-                <button
-                  className="flex items-center gap-1 bg-brand-mid text-white px-3 py-1.5 rounded-lg text-sm font-semibold"
-                  onClick={() => setShowCat(true)}
-                >
-                  <Plus className="w-4 h-4" /> Add
-                </button>
-              </div>
-
-              {editItems.length === 0 && (
-                <p className="text-sm text-gray-400 py-3 text-center">Tap Add to add parts or services</p>
-              )}
-
-              {editItems.map((item, i) => (
-                <div key={i} className="flex flex-col gap-2 py-2 border-b border-gray-100 last:border-0 sm:flex-row sm:items-center sm:gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-gray-400 truncate">₹{item.unitPrice} each</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-1 shrink-0">
-                    <div className="flex items-center gap-1 rounded-2xl bg-gray-50 p-1">
-                      <button
-                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
-                        onClick={() => updateEditQty(i, item.qty - 1)}
-                      >−</button>
-                      <span className="min-w-[1.5rem] text-center text-sm font-medium">{item.qty}</span>
-                      <button
-                        className="w-8 h-8 rounded-xl bg-white text-gray-600 font-bold flex items-center justify-center"
-                        onClick={() => updateEditQty(i, item.qty + 1)}
-                      >+</button>
-                    </div>
-                    <input
-                      type="tel"
-                      inputMode="decimal"
-                      enterKeyHint="done"
-                      className="w-20 rounded-xl border border-gray-200 px-2 py-1 text-center text-sm"
-                      value={item.unitPrice === 0 ? '' : item.unitPrice}
-                      onChange={(e) => updateEditPrice(i, e.target.value === '0' ? '' : e.target.value)}
-                      onKeyDown={handleEnterDismissKeyboard}
-                    />
-                    <span className="min-w-[5rem] text-sm font-semibold text-right">₹{item.total?.toFixed(2)}</span>
-                    <button
-                      className="text-red-400 p-1 shrink-0"
-                      onClick={() => removeEditItem(i)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Labour + GST */}
-            <div className="card space-y-3">
-              <div>
-                <label className="section-label">Labour Charges (₹)</label>
-                <input
-                  type="tel"
-                  inputMode="decimal"
-                  className="input-field"
-                  placeholder="0"
-                  value={editLabour}
-                  onChange={(e) => setEditLabour(e.target.value)}
-                  onKeyDown={handleEnterDismissKeyboard}
-                />
-              </div>
-
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div
-                  className={`w-11 h-6 rounded-full transition-colors ${editIsGST ? 'bg-brand-mid' : 'bg-gray-300'}`}
-                  onClick={() => setEditIsGST((g) => !g)}
-                >
-                  <div className={`w-5 h-5 bg-white rounded-full shadow mt-0.5 transition-transform ${editIsGST ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`} />
-                </div>
-                <span className="text-sm font-medium">GST Bill (18%)</span>
-              </label>
-            </div>
-
-            {/* Running total */}
-            <div className="card space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Parts Subtotal</span>
-                <span>{fmtCurrency(editPartsSubtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Labour</span>
-                <span>{fmtCurrency(parseFloat(editLabour) || 0)}</span>
-              </div>
-              {editIsGST && (
-                <>
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>CGST (9%)</span><span>{fmtCurrency(editCgst)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>SGST (9%)</span><span>{fmtCurrency(editSgst)}</span>
-                  </div>
-                </>
-              )}
-              <div className="border-t border-gray-200 pt-2 flex justify-between">
-                <span className="font-bold text-brand-dark">Grand Total</span>
-                <span className="font-bold text-xl text-brand-dark">{fmtCurrency(editGrandTotal)}</span>
-              </div>
-            </div>
-
-            {/* Save / Cancel */}
-            <div className="flex gap-3">
-              <button
-                className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm"
-                onClick={() => setEditMode(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="flex-2 flex-grow btn-accent flex items-center justify-center gap-2"
-                onClick={handleSaveEdit}
-                disabled={savingEdit}
-              >
-                <Check className="w-4 h-4" />
-                {savingEdit ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
+            <DocumentEditPanel
+              items={editItems}
+              onAddClick={() => setShowCat(true)}
+              onRemoveItem={removeEditItem}
+              onDecreaseQty={(i) => updateEditQty(i, editItems[i].qty - 1)}
+              onIncreaseQty={(i) => updateEditQty(i, editItems[i].qty + 1)}
+              onPriceChange={updateEditPrice}
+              onPriceKeyDown={handleEnterDismissKeyboard}
+              itemsTitle="Parts & Services"
+              addLabel={t('common.add')}
+              emptyText="Tap Add to add parts or services"
+              photoTitle={t('estimate.jobPhoto')}
+              photoHint={t('estimate.jobPhotoHint')}
+              photoPreparing={photoPreparing}
+              photoPreview={editJobPhotoPreview}
+              photoInputRef={photoInputRef}
+              onPhotoSelect={handleEditPhotoSelect}
+              onPhotoRemove={handleRemoveEditPhoto}
+              photoTapLabel={t('estimate.photoTap')}
+              photoHelpLabel={t('estimate.photoHelp')}
+              photoPreparingLabel={t('estimate.photoPreparing')}
+              replacePhotoLabel={t('settings.replacePhoto')}
+              removePhotoLabel={t('settings.removePhoto')}
+              labourLabel="Labour Charges (₹)"
+              labourValue={editLabour}
+              onLabourChange={(e) => setEditLabour(e.target.value)}
+              onLabourKeyDown={handleEnterDismissKeyboard}
+              gstLabel="GST Bill (18%)"
+              isGST={editIsGST}
+              onToggleGST={() => setEditIsGST((g) => !g)}
+              totalRows={editTotalRows}
+              grandTotalLabel="Grand Total"
+              grandTotalValue={fmtCurrency(editGrandTotal)}
+              onCancel={() => setEditMode(false)}
+              onSave={handleSaveEdit}
+              saving={savingEdit}
+              cancelLabel={t('common.cancel')}
+              saveLabel="Save Changes"
+              savingLabel="Saving…"
+            />
           </>
         )}
       </div>
@@ -768,7 +548,7 @@ export default function EstimateDetail() {
         <StickyActionBar className="space-y-2">
           <div className="flex gap-2">
             <button
-              className="btn-primary flex-1 flex items-center justify-center gap-2"
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-brand-mid/20 bg-white px-4 text-sm font-semibold text-brand-dark shadow-sm"
               onClick={handlePreviewPDF}
               disabled={pdfLoading}
             >
@@ -776,16 +556,16 @@ export default function EstimateDetail() {
               {pdfLoading ? '…' : t('bill.viewPdf')}
             </button>
             <button
-              className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white rounded-xl py-3 font-semibold active:scale-95 transition-all disabled:opacity-60"
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1fa855] px-4 text-sm font-semibold text-white active:scale-95 transition-all disabled:opacity-60"
               onClick={handleWhatsApp}
               disabled={pdfLoading}
             >
-              <WhatsAppIcon className="w-6 h-6" badge badgeClassName="p-1" />
+              <WhatsAppIcon className="w-5 h-5" badge badgeClassName="p-1" />
               {pdfLoading ? '…' : 'WhatsApp'}
             </button>
           </div>
           <button
-            className="btn-accent w-full flex items-center justify-center gap-2"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-mid px-4 text-sm font-semibold text-white shadow-sm"
             onClick={handleConvertToBill}
             disabled={converting}
           >

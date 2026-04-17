@@ -124,6 +124,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   const fmt = mkFmt(F === 'DejaVuSans');       // ₹ with DejaVuSans, Rs. with Helvetica
 
   const W = doc.internal.pageSize.getWidth();  // 148mm
+  const H = doc.internal.pageSize.getHeight(); // 210mm
   const M = PAGE_MARGIN_MM;
 
   const isEstimate    = bill.type === 'estimate';
@@ -302,23 +303,47 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     t('pdf.srNo'), t('pdf.description'), t('pdf.qty'), t('pdf.rate'), t('pdf.amount'),
   ];
 
-  // Header row
-  doc.setFillColor(...BRAND_DARK);
-  doc.rect(M, y, W - 2 * M, 8, 'F');
-  doc.setTextColor(...WHITE);
-  doc.setFont(F, 'bold');
-  doc.setFontSize(8);
-  headers.forEach((h, i) => {
-    const align = i === 1 ? 'left' : 'right';
-    const x     = i === 1 ? colX[i] : colX[i] + colW[i];
-    doc.text(h, x, y + 5.5, { align });
-  });
-  y += 8;
+  const resetBodyStyle = () => {
+    doc.setTextColor(...TEXT);
+    doc.setFont(F, 'normal');
+    doc.setFontSize(8);
+  };
+
+  const startNewPage = () => {
+    doc.addPage('a5', 'portrait');
+    y = M;
+    resetBodyStyle();
+  };
+
+  const ensureSpace = (neededHeight) => {
+    if (y + neededHeight <= H - M) return;
+    startNewPage();
+  };
+
+  const drawTableHeader = () => {
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(M, y, W - 2 * M, 8, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFont(F, 'bold');
+    doc.setFontSize(8);
+    headers.forEach((h, i) => {
+      const align = i === 1 ? 'left' : 'right';
+      const x = i === 1 ? colX[i] : colX[i] + colW[i];
+      doc.text(h, x, y + 5.5, { align });
+    });
+    y += 8;
+    resetBodyStyle();
+  };
+
+  drawTableHeader();
 
   // Data rows
-  doc.setFont(F, 'normal');
-  doc.setFontSize(8);
   items.forEach((item, idx) => {
+    if (y + 6 > H - M - 28) {
+      startNewPage();
+      drawTableHeader();
+    }
+
     const bg = idx % 2 === 0 ? WHITE : LIGHT_GRAY;
     doc.setFillColor(...bg);
     doc.rect(M, y, W - 2 * M, 6, 'F');
@@ -333,6 +358,8 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     doc.text(fmt(item.total),                  RX,                 y + 4.2, { align: 'right' });
     y += 6;
   });
+
+  ensureSpace((isGST ? 31 : 23) + (!isEstimate && (shop?.qrCodeUrl || shop?.upiId) ? 40 : 0) + 24);
 
   // ── Totals: Parts Subtotal → Labour → GST → Grand Total ──────────────────────
   // Parts Subtotal
@@ -390,6 +417,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   //   • shop.qrCodeUrl null → UPI ID text only (customer types it manually)
   //   • neither set         → skip payment section
   if (!isEstimate && (shop?.qrCodeUrl || shop?.upiId)) {
+    ensureSpace(shop?.qrCodeUrl ? 38 : 18);
     doc.setTextColor(...TEXT);
     doc.setFont(F, 'bold');
     doc.setFontSize(9);
@@ -429,6 +457,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   }
 
   // ── Footer ───────────────────────────────────────────────────────────────────
+  ensureSpace(22);
   y += 8; // Add extra space after QR/payment section
 
   doc.setTextColor(...GRAY);

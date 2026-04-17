@@ -30,11 +30,13 @@
   /* Header */
   --header-base-height: 44px;
   --header-total-height: calc(var(--header-base-height) + var(--safe-top));
+  --screen-header-top: calc(var(--safe-top) + 10px);
 
   /* Page Spacing - Reduced */
   --page-gap: 12px;
   --page-bottom-padding: calc(var(--nav-total-height) + var(--page-gap));
   --screen-page-bottom: calc(var(--safe-bottom) + var(--page-gap));
+  --screen-safe-bottom: calc(var(--safe-bottom) + 8px);
 }
 
 html, body {

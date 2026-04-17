@@ -1,11 +1,11 @@
 const BOTTOM_OFFSETS = {
-  nav: 'var(--bottom-nav-offset, 72px)',
+  nav: 'calc(var(--nav-total-height, 44px) + 8px)',
   screen: 'var(--screen-safe-bottom, 8px)',
 };
 
 const INNER_PADDING_BOTTOM = {
-  nav: '16px',
-  screen: '16px',
+  nav: '12px',
+  screen: '12px',
 };
 
 export default function StickyActionBar({
@@ -18,12 +18,12 @@ export default function StickyActionBar({
 
   return (
     <div
-      className="fixed left-0 right-0 z-10 mx-auto max-w-lg"
+      className="fixed left-0 right-0 z-40 mx-auto max-w-lg"
       style={{ bottom }}
     >
       <div
         className={[
-          'border-t border-gray-100 bg-white px-4 pt-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]',
+          'bg-white px-4 pt-2.5 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]',
           className,
         ].join(' ')}
         style={{ paddingBottom }}

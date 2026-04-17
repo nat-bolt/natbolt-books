@@ -1236,34 +1236,42 @@ export default function NewEstimate() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                        <div>
+                      <div className="mt-2 flex items-end gap-2">
+                        <div className="min-w-0 flex-1">
                           <label className="text-xs text-gray-400">{t('parts.qty')}</label>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
-                            value={part.qty}
-                            onChange={(e) => updatePartQty(i, e.target.value)}
-                            onKeyDown={handleEnterDismissKeyboard}
-                          />
+                          <div className="flex h-10 items-center justify-between rounded-lg border border-gray-200 bg-white px-1">
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-50 text-base font-bold text-gray-600"
+                              onClick={() => updatePartQty(i, part.qty - 1)}
+                            >
+                              −
+                            </button>
+                            <span className="min-w-0 flex-1 text-center text-sm font-semibold text-brand-dark">{part.qty}</span>
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-50 text-base font-bold text-gray-600"
+                              onClick={() => updatePartQty(i, part.qty + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <label className="text-xs text-gray-400">{t('parts.price')}</label>
                           <input
                             type="tel"
                             inputMode="decimal"
                             enterKeyHint="done"
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
+                            className="h-10 w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
                             value={part.unitPrice === 0 ? '' : part.unitPrice}
                             onChange={(e) => updatePartPrice(i, e.target.value === '0' ? '' : e.target.value)}
                             onKeyDown={handleEnterDismissKeyboard}
                           />
                         </div>
-                        <div>
+                        <div className="w-20 flex-shrink-0 text-right">
                           <label className="text-xs text-gray-400">{t('parts.total')}</label>
-                          <p className="pt-1 text-center text-sm font-bold text-brand-dark">
+                          <p className="pt-1 text-sm font-bold text-brand-dark">
                             ₹{part.total.toFixed(0)}
                           </p>
                         </div>

@@ -13,21 +13,27 @@ export default function PdfPreviewModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col min-h-0" style={{ height: 'var(--app-height, 100dvh)' }}>
+    <div className="fixed inset-0 z-[90] bg-black/55 flex flex-col min-h-0" style={{ height: 'var(--app-height, 100dvh)' }}>
       <div
-        className="bg-white px-4 pb-3 border-b border-gray-200 sticky top-0 z-10 shrink-0"
-        style={{ paddingTop: 'var(--screen-header-top)' }}
+        className="mx-auto w-full max-w-lg bg-white px-4 pb-3 pt-3 shrink-0 shadow-sm"
+        style={{
+          paddingTop: 'calc(var(--safe-top) + 50px)',
+          minHeight: 'calc(var(--header-base-height) + var(--safe-top) + 12px)',
+        }}
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-3">
           <button
-            className="btn-secondary !px-3 !py-2 text-sm"
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand-mid/20 bg-white text-brand-mid"
             onClick={onClose}
           >
             <X className="w-4 h-4" />
             <span className="sr-only">{t('common.close')}</span>
           </button>
+          <p className="min-w-0 flex-1 truncate text-center text-sm font-bold text-brand-dark">{t('bill.viewPdf')}</p>
           <button
-            className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5"
+            type="button"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-mid px-4 text-sm font-semibold text-white disabled:opacity-60"
             onClick={onDownload}
             disabled={!previewImageUrl || loading}
           >
@@ -35,12 +41,11 @@ export default function PdfPreviewModal({
             {t('bill.downloadPdf')}
           </button>
         </div>
-        <p className="mt-3 text-sm font-bold text-brand-dark truncate">{t('bill.viewPdf')}</p>
       </div>
 
       <div
         className="flex-1 min-h-0 bg-gray-100 overflow-y-auto"
-        style={{ paddingBottom: 'var(--screen-page-bottom)' }}
+        style={{ paddingBottom: 'calc(var(--screen-page-bottom) + 8px)' }}
       >
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-brand-dark">
@@ -48,7 +53,7 @@ export default function PdfPreviewModal({
             <p className="text-sm font-medium">{t('common.loading')}</p>
           </div>
         ) : previewImageUrl ? (
-          <div className="px-3 pt-4 pb-6">
+          <div className="mx-auto w-full max-w-lg px-3 pt-5 pb-6">
             <div className="mx-auto max-w-full rounded-[28px] bg-white shadow-lg border border-gray-200 p-3">
               <img
                 src={previewImageUrl}
