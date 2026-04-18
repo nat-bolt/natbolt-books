@@ -168,7 +168,12 @@
     "viewBill": "View Bill",
     "converting": "Converting...",
     "billCreated": "Bill created successfully!",
-    "estimateSaved": "Estimate saved!"
+    "estimateSaved": "Estimate saved!",
+    "draftSavedTitle": "Draft saved on this device",
+    "draftSavedBody": "Your progress is being kept automatically. You can come back later and continue from the same step.",
+    "draftRestoredTitle": "Draft restored",
+    "draftRestoredBody": "Your previous progress has been loaded. Continue from where you left off.",
+    "discardDraft": "Discard Draft"
   },
 
   "bill": {

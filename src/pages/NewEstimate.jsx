@@ -51,6 +51,69 @@ const TYPE_EMOJI = {
   bike: '🏍️', scooter: '🛵', moped: '🛵', electric: '⚡',
   auto: '🛺', car: '🚗', truck: '🚛', other: '🚘',
 };
+const NEW_VEHICLE_ID = '__new__';
+const DRAFT_STORAGE_VERSION = 1;
+const EMPTY_VEHICLE = {
+  number: '',
+  type: 'scooter',
+  brand: '',
+  model: '',
+};
+
+function dismissKeyboardOnEnter(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
+}
+
+function createEmptyVehicle() {
+  return { ...EMPTY_VEHICLE };
+}
+
+function getDraftStorageKey(shopId, docMode) {
+  return `nb_new_document_draft:${shopId}:${docMode}`;
+}
+
+function inferMimeTypeFromDataUrl(dataUrl) {
+  const match = dataUrl?.match(/^data:([^;]+);/);
+  return match?.[1] || 'image/jpeg';
+}
+
+async function dataUrlToFile(dataUrl, name = 'job-photo.jpg', type) {
+  if (!dataUrl) return null;
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], name, { type: type || blob.type || inferMimeTypeFromDataUrl(dataUrl) });
+}
+
+function hasDraftProgress({
+  customer,
+  customerVehicles,
+  selectedVehicleId,
+  vehicle,
+  odoReading,
+  jobPhotoPreview,
+  parts,
+  labour,
+  isGST,
+  step,
+}) {
+  return Boolean(
+    customer ||
+    customerVehicles.length > 0 ||
+    selectedVehicleId ||
+    vehicle.number ||
+    vehicle.brand ||
+    vehicle.model ||
+    odoReading ||
+    jobPhotoPreview ||
+    parts.length > 0 ||
+    labour ||
+    isGST ||
+    step > 0
+  );
+}
 
 // ── Customer search / create modal ────────────────────────────────────────────
 // onSelect(customer, vehicle|null) — vehicle is non-null only when a new
@@ -483,13 +546,13 @@ function PartsModal({ catalogue, onAdd, onClose }) {
                 <label className="section-label">{t('parts.qty')}</label>
                 <input className="input-field" type="number" inputMode="numeric" min="1"
                   value={custom.qty} onChange={(e) => setCustom((c) => ({ ...c, qty: e.target.value }))}
-                  onKeyDown={handleEnterDismissKeyboard} />
+                  onKeyDown={dismissKeyboardOnEnter} />
               </div>
               <div className="flex-1">
                 <label className="section-label">{t('parts.price')} *</label>
                 <input className="input-field" type="number" inputMode="decimal" placeholder={t('estimate.labourPlaceholder')}
                   value={custom.price} onChange={(e) => setCustom((c) => ({ ...c, price: e.target.value }))}
-                  onKeyDown={handleEnterDismissKeyboard} />
+                  onKeyDown={dismissKeyboardOnEnter} />
               </div>
             </div>
             <button className="btn-accent w-full" onClick={addCustom}>{t('common.add')}</button>
@@ -542,6 +605,8 @@ export default function NewEstimate() {
   const [docMode, setDocMode] = useState(
     searchParams.get('mode') === 'bill' ? 'bill' : 'estimate'
   );
+  const draftHydratingRef = useRef(false);
+  const skipNextDraftSaveNoticeRef = useRef(false);
 
   // Customer
   const [customer, setCustomer] = useState(null);
@@ -550,12 +615,10 @@ export default function NewEstimate() {
   const [customerVehicles, setCustomerVehicles]     = useState([]);
   const [vehiclesLoading, setVehiclesLoading]       = useState(false);
   const [selectedVehicleId, setSelectedVehicleId]   = useState(null); // null = new vehicle
-  const IS_NEW = selectedVehicleId === '__new__';
+  const IS_NEW = selectedVehicleId === NEW_VEHICLE_ID;
 
   // New vehicle form (used when customer has no vehicles OR "New Vehicle" selected)
-  const [vehicle, setVehicle] = useState({
-    number: '', type: 'scooter', brand: '', model: '',
-  });
+  const [vehicle, setVehicle] = useState(createEmptyVehicle);
 
   // Job photo
   const photoInputRef = useRef(null);
@@ -578,6 +641,8 @@ export default function NewEstimate() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPartsModal, setShowPartsModal]       = useState(false);
   const [step, setStep] = useState(0);
+  const [draftNotice, setDraftNotice] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
 
   // Computed totals
   const partsSubtotal = parts.reduce((s, p) => s + (p.total || 0), 0);
@@ -589,6 +654,47 @@ export default function NewEstimate() {
     t('estimate.stepItems'),
     t('estimate.stepTotals'),
   ];
+  const draftKey = shop?.id ? getDraftStorageKey(shop.id, docMode) : '';
+  const hasCurrentDraftProgress = hasDraftProgress({
+    customer,
+    customerVehicles,
+    selectedVehicleId,
+    vehicle,
+    odoReading,
+    jobPhotoPreview,
+    parts,
+    labour,
+    isGST,
+    step,
+  });
+
+  function resetComposerState() {
+    setCustomer(null);
+    setCustomerVehicles([]);
+    setVehiclesLoading(false);
+    setSelectedVehicleId(null);
+    setVehicle(createEmptyVehicle());
+    setJobPhoto(null);
+    setJobPhotoPreview('');
+    setPhotoPreparing(false);
+    setOdoReading('');
+    setParts([]);
+    setLabour('');
+    setIsGST(false);
+    setLoading(false);
+    setError('');
+    setShowCustomerModal(false);
+    setShowPartsModal(false);
+    setStep(0);
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  }
+
+  function clearCurrentDraft(resetForm = true) {
+    if (draftKey) localStorage.removeItem(draftKey);
+    skipNextDraftSaveNoticeRef.current = false;
+    setDraftNotice('');
+    if (resetForm) resetComposerState();
+  }
 
   // Load parts catalogue on mount
   useEffect(() => {
@@ -600,6 +706,161 @@ export default function NewEstimate() {
       })
       .catch(console.error);
   }, [shop]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+
+    let cancelled = false;
+
+    const restoreDraft = async () => {
+      draftHydratingRef.current = true;
+      skipNextDraftSaveNoticeRef.current = false;
+      setDraftReady(false);
+      setDraftNotice('');
+      resetComposerState();
+
+      const rawDraft = localStorage.getItem(draftKey);
+      if (!rawDraft) {
+        if (!cancelled) {
+          draftHydratingRef.current = false;
+          setDraftReady(true);
+        }
+        return;
+      }
+
+      try {
+        const parsedDraft = JSON.parse(rawDraft);
+        if (parsedDraft?.version !== DRAFT_STORAGE_VERSION) {
+          throw new Error('Draft version mismatch');
+        }
+
+        const nextCustomer = parsedDraft.customer || null;
+        const nextCustomerVehicles = Array.isArray(parsedDraft.customerVehicles)
+          ? parsedDraft.customerVehicles
+          : [];
+        const nextSelectedVehicleId = parsedDraft.selectedVehicleId || null;
+        const nextVehicle = { ...createEmptyVehicle(), ...(parsedDraft.vehicle || {}) };
+        const nextParts = Array.isArray(parsedDraft.parts) ? parsedDraft.parts : [];
+        const nextStep = Math.min(Math.max(Number(parsedDraft.step) || 0, 0), steps.length - 1);
+        const nextPhotoPreview = parsedDraft.jobPhotoDataUrl || '';
+
+        let restoredPhoto = null;
+        if (nextPhotoPreview) {
+          try {
+            restoredPhoto = await dataUrlToFile(
+              nextPhotoPreview,
+              parsedDraft.jobPhotoName || 'job-photo.jpg',
+              parsedDraft.jobPhotoType || inferMimeTypeFromDataUrl(nextPhotoPreview)
+            );
+          } catch (photoError) {
+            console.error('Draft photo restore failed:', photoError);
+          }
+        }
+
+        if (cancelled) return;
+
+        setCustomer(nextCustomer);
+        setCustomerVehicles(nextCustomerVehicles);
+        setSelectedVehicleId(nextSelectedVehicleId);
+        setVehicle(nextVehicle);
+        setOdoReading(parsedDraft.odoReading || '');
+        setParts(nextParts);
+        setLabour(parsedDraft.labour || '');
+        setIsGST(Boolean(parsedDraft.isGST));
+        setJobPhotoPreview(nextPhotoPreview);
+        setJobPhoto(restoredPhoto);
+        setStep(nextStep);
+
+        if (hasDraftProgress({
+          customer: nextCustomer,
+          customerVehicles: nextCustomerVehicles,
+          selectedVehicleId: nextSelectedVehicleId,
+          vehicle: nextVehicle,
+          odoReading: parsedDraft.odoReading || '',
+          jobPhotoPreview: nextPhotoPreview,
+          parts: nextParts,
+          labour: parsedDraft.labour || '',
+          isGST: Boolean(parsedDraft.isGST),
+          step: nextStep,
+        })) {
+          skipNextDraftSaveNoticeRef.current = true;
+          setDraftNotice('restored');
+        }
+      } catch (draftError) {
+        console.error('Draft restore failed:', draftError);
+        localStorage.removeItem(draftKey);
+      } finally {
+        if (!cancelled) {
+          draftHydratingRef.current = false;
+          setDraftReady(true);
+        }
+      }
+    };
+
+    restoreDraft();
+
+    return () => {
+      cancelled = true;
+      draftHydratingRef.current = false;
+    };
+  }, [draftKey, steps.length]);
+
+  useEffect(() => {
+    if (!draftKey || !draftReady || draftHydratingRef.current) return;
+
+    if (!hasCurrentDraftProgress) {
+      localStorage.removeItem(draftKey);
+      if (draftNotice === 'saved') setDraftNotice('');
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      try {
+        const nextDraft = {
+          version: DRAFT_STORAGE_VERSION,
+          customer,
+          customerVehicles,
+          selectedVehicleId,
+          vehicle,
+          odoReading,
+          jobPhotoDataUrl: jobPhotoPreview || '',
+          jobPhotoName: jobPhoto?.name || 'job-photo.jpg',
+          jobPhotoType: jobPhoto?.type || inferMimeTypeFromDataUrl(jobPhotoPreview),
+          parts,
+          labour,
+          isGST,
+          step,
+          updatedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(draftKey, JSON.stringify(nextDraft));
+        if (skipNextDraftSaveNoticeRef.current) {
+          skipNextDraftSaveNoticeRef.current = false;
+        } else {
+          setDraftNotice('saved');
+        }
+      } catch (draftSaveError) {
+        console.error('Draft save failed:', draftSaveError);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    customer,
+    customerVehicles,
+    selectedVehicleId,
+    vehicle,
+    odoReading,
+    jobPhotoPreview,
+    jobPhoto,
+    parts,
+    labour,
+    isGST,
+    step,
+    draftKey,
+    draftReady,
+    hasCurrentDraftProgress,
+    draftNotice,
+  ]);
 
   // Load customer's vehicles whenever customer changes
   const loadCustomerVehicles = async (customerId) => {
@@ -620,7 +881,7 @@ export default function NewEstimate() {
       if (mapped.length > 0) {
         setSelectedVehicleId(mapped[0].id);
       } else {
-        setSelectedVehicleId('__new__'); // no vehicles → go straight to new vehicle form
+        setSelectedVehicleId(NEW_VEHICLE_ID); // no vehicles → go straight to new vehicle form
       }
     } catch (err) {
       console.error('loadCustomerVehicles:', err);
@@ -634,7 +895,7 @@ export default function NewEstimate() {
   const handleCustomerSelect = (c, preVehicle = null) => {
     setCustomer(c);
     setShowCustomerModal(false);
-    setVehicle({ number: '', type: 'scooter', brand: '', model: '' });
+    setVehicle(createEmptyVehicle());
 
     if (preVehicle) {
       // Vehicle already created DB-side — skip the loadCustomerVehicles fetch
@@ -732,6 +993,10 @@ export default function NewEstimate() {
     if (!customer)          { setError(t('estimate.selectCustomerError')); return; }
     if (parts.length === 0) { setError(t('estimate.addItemError')); return; }
     if (IS_NEW && !vehicle.number.trim()) { setError(t('estimate.vehicleRequired')); return; }
+    if (!IS_NEW && !customerVehicles.some((v) => v.id === selectedVehicleId)) {
+      setError(t('estimate.selectVehicleError'));
+      return;
+    }
 
     setError('');
     setLoading(true);
@@ -765,6 +1030,7 @@ export default function NewEstimate() {
       } else {
         // Use existing vehicle
         const v = customerVehicles.find((cv) => cv.id === selectedVehicleId);
+        if (!v) throw new Error(t('estimate.selectVehicleError'));
         vehicleId    = v.id;
         vehicleNo    = v.vehicleNo;
         vehicleType  = v.vehicleType;
@@ -840,6 +1106,7 @@ export default function NewEstimate() {
       }
 
       // Navigate to the right detail page
+      clearCurrentDraft(false);
       navigate(docMode === 'bill' ? `/bill/${newBill.id}` : `/estimate/${newBill.id}`);
     } catch (err) {
       console.error('Save error:', err);
@@ -864,6 +1131,10 @@ export default function NewEstimate() {
         setError(t('estimate.selectVehicleError'));
         return false;
       }
+      if (!IS_NEW && !customerVehicles.some((v) => v.id === selectedVehicleId)) {
+        setError(t('estimate.selectVehicleError'));
+        return false;
+      }
       if (IS_NEW && !vehicle.number.trim()) {
         setError(t('estimate.vehicleRequired'));
         return false;
@@ -881,13 +1152,6 @@ export default function NewEstimate() {
 
     setError('');
     return true;
-  };
-
-  const handleEnterDismissKeyboard = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.currentTarget.blur();
-    }
   };
 
   const handleNextStep = () => {
@@ -1034,7 +1298,7 @@ export default function NewEstimate() {
                             </button>
                           ))}
                           <button
-                            onClick={() => setSelectedVehicleId('__new__')}
+                            onClick={() => setSelectedVehicleId(NEW_VEHICLE_ID)}
                             type="button"
                             className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
                               IS_NEW
@@ -1067,7 +1331,7 @@ export default function NewEstimate() {
                             placeholder={t('vehicle.numberPlaceholder')}
                             value={vehicle.number}
                             onChange={(e) => setVehicle((v) => ({ ...v, number: e.target.value }))}
-                            onKeyDown={handleEnterDismissKeyboard}
+                            onKeyDown={dismissKeyboardOnEnter}
                           />
                         </div>
 
@@ -1138,7 +1402,7 @@ export default function NewEstimate() {
                           placeholder={t('vehicle.odoPlaceholder')}
                           value={odoReading}
                           onChange={(e) => setOdoReading(e.target.value.replace(/\D/g, ''))}
-                          onKeyDown={handleEnterDismissKeyboard}
+                          onKeyDown={dismissKeyboardOnEnter}
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
                           {t('vehicle.odoUnit')}
@@ -1266,7 +1530,7 @@ export default function NewEstimate() {
                             className="h-10 w-full rounded-lg border border-gray-200 px-2 py-1 text-center text-sm"
                             value={part.unitPrice === 0 ? '' : part.unitPrice}
                             onChange={(e) => updatePartPrice(i, e.target.value === '0' ? '' : e.target.value)}
-                            onKeyDown={handleEnterDismissKeyboard}
+                            onKeyDown={dismissKeyboardOnEnter}
                           />
                         </div>
                         <div className="w-20 flex-shrink-0 text-right">
@@ -1306,7 +1570,7 @@ export default function NewEstimate() {
                     placeholder={t('estimate.labourPlaceholder')}
                     value={labour}
                     onChange={(e) => setLabour(e.target.value)}
-                    onKeyDown={handleEnterDismissKeyboard}
+                    onKeyDown={dismissKeyboardOnEnter}
                   />
                 </div>
               </div>
@@ -1353,6 +1617,25 @@ export default function NewEstimate() {
         {error ? (
           <InlineNotice tone="danger" compact>
             {error}
+          </InlineNotice>
+        ) : null}
+
+        {!error && hasCurrentDraftProgress ? (
+          <InlineNotice
+            tone="info"
+            compact
+            title={draftNotice === 'restored' ? t('estimate.draftRestoredTitle') : t('estimate.draftSavedTitle')}
+            action={(
+              <button
+                type="button"
+                className="text-xs font-bold text-blue-700"
+                onClick={() => clearCurrentDraft()}
+              >
+                {t('estimate.discardDraft')}
+              </button>
+            )}
+          >
+            {draftNotice === 'restored' ? t('estimate.draftRestoredBody') : t('estimate.draftSavedBody')}
           </InlineNotice>
         ) : null}
       </div>

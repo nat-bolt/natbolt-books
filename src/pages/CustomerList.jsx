@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, ChevronRight, User, Plus, X, Lock, Crown } from 'lucide-react';
-import { supabase, mapCustomer, mapVehicle } from '../supabase';
+import { Search, ChevronRight, User, Plus, X, Lock, Crown, Phone, CalendarClock } from 'lucide-react';
+import { supabase, mapBill, mapCustomer, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
@@ -278,8 +278,8 @@ export default function CustomerList() {
   const { shop } = useStore();
 
   const [customers, setCustomers]   = useState([]);
-  const [filtered, setFiltered]     = useState([]);
   const [search, setSearch]         = useState('');
+  const [filter, setFilter]         = useState('all');
   const [loading, setLoading]       = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -288,24 +288,107 @@ export default function CustomerList() {
     loadCustomers();
   }, [shop]);
 
-  useEffect(() => {
-    if (!search.trim()) { setFiltered(customers); return; }
-    const q = search.toLowerCase();
-    setFiltered(customers.filter((c) =>
-      c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
-    ));
-  }, [search, customers]);
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const q = search.trim().toLowerCase();
+
+    return customers
+      .filter((customer) => {
+        const matchesSearch = !q || customer.name?.toLowerCase().includes(q) || customer.phone?.includes(q) || customer.primaryVehicleNo?.toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+
+        if (filter === 'pending') return customer.pendingAmount > 0;
+        if (filter === 'recent') {
+          return customer.lastVisitAt && (now - new Date(customer.lastVisitAt).getTime()) <= 30 * 24 * 60 * 60 * 1000;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (filter === 'pending' && a.pendingAmount !== b.pendingAmount) {
+          return b.pendingAmount - a.pendingAmount;
+        }
+        const aTime = a.lastVisitAt ? new Date(a.lastVisitAt).getTime() : 0;
+        const bTime = b.lastVisitAt ? new Date(b.lastVisitAt).getTime() : 0;
+        if (aTime !== bTime) return bTime - aTime;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+  }, [customers, filter, search]);
+
+  const formatVisitDate = (value) => {
+    if (!value) return t('common.na');
+    return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  };
 
   const loadCustomers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('shop_id', shop.id)
-        .order('name');
+      const [customersResult, vehiclesResult, billsResult] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('*')
+          .eq('shop_id', shop.id)
+          .order('name'),
+        supabase
+          .from('vehicles')
+          .select('*')
+          .eq('shop_id', shop.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('bills')
+          .select('id, customer_id, type, status, grand_total, balance_due, vehicle_no, vehicle_brand, vehicle_model, created_at')
+          .eq('shop_id', shop.id)
+          .order('created_at', { ascending: false }),
+      ]);
 
-      if (error) throw error;
-      setCustomers((data || []).map(mapCustomer));
+      if (customersResult.error) throw customersResult.error;
+      if (vehiclesResult.error) throw vehiclesResult.error;
+      if (billsResult.error) throw billsResult.error;
+
+      const vehicleRows = (vehiclesResult.data || []).map(mapVehicle);
+      const billRows = (billsResult.data || []).map(mapBill);
+
+      const vehiclesByCustomer = new Map();
+      vehicleRows.forEach((vehicle) => {
+        const list = vehiclesByCustomer.get(vehicle.customerId) || [];
+        list.push(vehicle);
+        vehiclesByCustomer.set(vehicle.customerId, list);
+      });
+
+      const billsByCustomer = new Map();
+      billRows.forEach((bill) => {
+        const list = billsByCustomer.get(bill.customerId) || [];
+        list.push(bill);
+        billsByCustomer.set(bill.customerId, list);
+      });
+
+      const enrichedCustomers = (customersResult.data || []).map((row) => {
+        const customer = mapCustomer(row);
+        const customerVehicles = vehiclesByCustomer.get(customer.id) || [];
+        const customerBills = billsByCustomer.get(customer.id) || [];
+        const latestBill = customerBills[0] || null;
+        const primaryVehicle = latestBill
+          ? {
+              vehicleNo: latestBill.vehicleNo,
+              vehicleBrand: latestBill.vehicleBrand,
+              vehicleModel: latestBill.vehicleModel,
+            }
+          : (customerVehicles[0] || null);
+
+        const pendingAmount = customerBills.reduce((sum, bill) => {
+          if (bill.status === 'unpaid') return sum + Number(bill.grandTotal || 0);
+          if (bill.status === 'advance') return sum + Number(bill.balanceDue || 0);
+          return sum;
+        }, 0);
+
+        return {
+          ...customer,
+          lastVisitAt: latestBill?.createdAt || null,
+          pendingAmount,
+          primaryVehicleNo: primaryVehicle?.vehicleNo || '',
+          primaryVehicleLabel: [primaryVehicle?.vehicleBrand, primaryVehicle?.vehicleModel].filter(Boolean).join(' '),
+        };
+      });
+
+      setCustomers(enrichedCustomers);
     } catch (err) {
       console.error('CustomerList error:', err);
     } finally {
@@ -326,23 +409,59 @@ export default function CustomerList() {
   return (
     <Layout title={t('customer.title')}>
       <div className="p-4 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            className="input-field pl-9"
-            placeholder={t('customer.searchPlaceholder')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              className="input-field pl-9"
+              placeholder={t('customer.searchPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="flex h-12 items-center justify-center gap-1.5 rounded-xl bg-brand-mid px-4 text-sm font-semibold text-white shadow-sm"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus className="h-4 w-4" />
+            {t('common.add')}
+          </button>
         </div>
 
-        {/* Count */}
-        {!loading && customers.length > 0 && (
-          <p className="text-xs text-gray-400">
-            {filtered.length} of {customers.length} customers
-          </p>
-        )}
+        {!loading ? (
+          <>
+            <div className="-mx-1 overflow-x-auto overflow-y-hidden px-1 pb-1">
+              <div className="inline-flex min-w-max gap-2">
+                {[
+                  { key: 'all', label: t('customer.filterAll') },
+                  { key: 'recent', label: t('customer.filterRecent') },
+                  { key: 'pending', label: t('customer.filterPending') },
+                ].map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setFilter(option.key)}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold whitespace-nowrap ${
+                      filter === option.key ? 'bg-brand-mid text-white' : 'bg-white text-gray-600 border border-gray-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>{t('customer.directoryCount', { count: filtered.length, total: customers.length })}</span>
+              {filter === 'pending' ? (
+                <span className="font-semibold text-red-500">
+                  {t('customer.pendingSummary', { count: filtered.length })}
+                </span>
+              ) : null}
+            </div>
+          </>
+        ) : null}
 
         {/* List */}
         {loading ? (
@@ -353,14 +472,14 @@ export default function CustomerList() {
           <div className="card text-center py-12">
             <User className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">
-              {search ? 'No customers found' : 'No customers yet'}
+              {search ? t('customer.noCustomersFound') : t('customer.noCustomersYet')}
             </p>
             {!search && (
               <button
                 className="mt-4 btn-primary text-sm px-5 py-2"
                 onClick={() => setShowAddModal(true)}
               >
-                + Add First Customer
+                + {t('customer.addFirstCustomer')}
               </button>
             )}
           </div>
@@ -369,35 +488,52 @@ export default function CustomerList() {
             {filtered.map((c) => (
               <button
                 key={c.id}
-                className="card w-full text-left flex items-center gap-3 active:bg-gray-50"
+                className="card w-full text-left active:bg-gray-50"
                 onClick={() => navigate(`/customers/${c.id}`)}
               >
-                <div className="w-11 h-11 rounded-xl bg-brand-light flex items-center justify-center font-bold text-brand-mid text-lg flex-shrink-0">
-                  {c.name?.[0]?.toUpperCase() || '?'}
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-brand-light flex items-center justify-center font-bold text-brand-mid text-lg flex-shrink-0">
+                    {c.name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-brand-dark">{c.name}</p>
+                        <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
+                          <Phone className="h-3.5 w-3.5" />
+                          <span>{c.phone}</span>
+                        </div>
+                      </div>
+                      {c.pendingAmount > 0 ? (
+                        <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-500">
+                          ₹{Math.round(c.pendingAmount)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-gray-700">
+                          {c.primaryVehicleNo || t('common.na')}
+                        </p>
+                        <p className="truncate">{c.primaryVehicleLabel || t('customer.vehiclePending')}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="flex items-center justify-end gap-1 text-gray-400">
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          <span>{t('customer.lastVisit')}</span>
+                        </div>
+                        <p className="mt-0.5 font-medium text-gray-700">{formatVisitDate(c.lastVisitAt)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="mt-2 w-4 h-4 text-gray-400 flex-shrink-0" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{c.name}</p>
-                  <p className="text-sm text-gray-500">{c.phone}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </button>
             ))}
           </div>
         )}
       </div>
-
-      {/* FAB — Add Customer (sits above bottom nav) */}
-      <button
-        className="fixed right-4 max-w-[calc(512px-1rem)] w-14 h-14 bg-brand-mid text-white rounded-full shadow-lg flex items-center justify-center z-10 active:scale-95 transition-transform"
-        style={{
-          bottom: 'var(--fab-bottom-offset)',
-          right: 'max(1rem, calc(50% - 256px + 1rem))',
-        }}
-        onClick={() => setShowAddModal(true)}
-        aria-label="Add customer"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
 
       {showAddModal && (
         <AddCustomerModal
