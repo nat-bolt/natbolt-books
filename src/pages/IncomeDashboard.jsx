@@ -188,8 +188,31 @@ export default function IncomeDashboard() {
 
   // ── Daily chart data (thisMonth only) ─────────────────────────────────────
   const dailyData = useMemo(() => {
+    const now = new Date();
+
+    if (period === 'thisWeek') {
+      const start = new Date(now);
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      start.setDate(diff);
+      start.setHours(0, 0, 0, 0);
+
+      const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const values = Array.from({ length: 7 }, () => 0);
+
+      bills.forEach((bill) => {
+        const billDate = new Date(bill.createdAt);
+        const dayIndex = Math.floor((billDate - start) / (24 * 60 * 60 * 1000));
+        if (dayIndex >= 0 && dayIndex < 7) {
+          values[dayIndex] += bill.grandTotal || 0;
+        }
+      });
+
+      return labels.map((label, index) => ({ label, value: values[index] }));
+    }
+
     if (period !== 'thisMonth') return [];
-    const now         = new Date();
+
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const map = {};
     for (let d = 1; d <= daysInMonth; d++) map[d] = 0;
@@ -219,8 +242,8 @@ export default function IncomeDashboard() {
       titleNode={(
         <div>
           <h1 className="text-lg font-bold">{t('income.title')}</h1>
-          <p className="flex items-center gap-1 text-xs text-brand-light">
-            <Crown className="w-3 h-3" /> {t('income.paidFeature')}
+          <p className="text-xs text-gray-500">
+            {t(`income.${period}`, { defaultValue: PERIOD_LABELS[period] })}
           </p>
         </div>
       )}
@@ -255,47 +278,60 @@ export default function IncomeDashboard() {
         ) : bills.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 text-center text-gray-400 shadow-sm">
             <TrendingUp className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-            <p className="font-medium">No bills found</p>
-            <p className="text-xs mt-1">No completed bills for {PERIOD_LABELS[period].toLowerCase()}</p>
+            <p className="font-medium">{t('income.noBillsTitle')}</p>
+            <p className="text-xs mt-1">{t('income.noBillsBody', { period: t(`income.${period}`, { defaultValue: PERIOD_LABELS[period] }).toLowerCase() })}</p>
           </div>
         ) : (
           <>
-            {/* ── Key stats ── */}
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-[#eefbf3] via-[#f6fffa] to-[#ecfdf5] p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700/75">{t('income.primaryKpi')}</p>
+                  <p className="mt-2 text-3xl font-bold text-emerald-700">₹{stats.totalRevenue.toLocaleString('en-IN')}</p>
+                  <p className="mt-1 text-xs text-emerald-800/70">
+                    {t('income.primaryKpiSub', { count: bills.length, period: t(`income.${period}`, { defaultValue: PERIOD_LABELS[period] }) })}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-emerald-100 p-3">
+                  <TrendingUp className="h-6 w-6 text-emerald-600" />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <StatCard
                 icon={IndianRupee}
-                label="Total Revenue"
+                label={t('income.totalRevenue')}
                 value={`₹${stats.totalRevenue.toLocaleString('en-IN')}`}
                 color="text-brand-dark"
               />
               <StatCard
                 icon={Receipt}
-                label="Total Bills"
+                label={t('income.totalBills')}
                 value={bills.length}
-                sub={`avg ₹${stats.avgValue.toLocaleString('en-IN')}`}
+                sub={`${t('income.avgBillValue').toLowerCase()} ₹${stats.avgValue.toLocaleString('en-IN')}`}
                 color="text-brand-mid"
               />
               <StatCard
                 icon={Banknote}
-                label="Collected"
+                label={t('income.collected')}
                 value={`₹${stats.collected.toLocaleString('en-IN')}`}
                 color="text-green-600"
                 bg="bg-green-50"
               />
               <StatCard
                 icon={AlertCircle}
-                label="Outstanding"
+                label={t('income.outstanding')}
                 value={`₹${stats.outstanding.toLocaleString('en-IN')}`}
                 color={stats.outstanding > 0 ? 'text-red-500' : 'text-gray-400'}
                 bg={stats.outstanding > 0 ? 'bg-red-50' : 'bg-white'}
               />
             </div>
 
-            {/* ── Payment breakdown ── */}
             {Object.values(stats.byMode).some((v) => v > 0) && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-3">
-                  Payment Breakdown
+                  {t('income.paymentModes')}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(stats.byMode).map(([mode, amount]) =>
@@ -313,23 +349,22 @@ export default function IncomeDashboard() {
               </div>
             )}
 
-            {/* ── Daily chart (thisMonth) ── */}
-            {period === 'thisMonth' && dailyData.some((d) => d.value > 0) && (
+            {/* ── Daily chart (thisWeek / thisMonth) ── */}
+            {(period === 'thisWeek' || period === 'thisMonth') && dailyData.some((d) => d.value > 0) && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-3">
-                  Daily Revenue
+                  {t(period === 'thisWeek' ? 'income.dailyChartWeek' : 'income.dailyChartMonth')}
                 </p>
                 <MiniBarChart data={dailyData} />
               </div>
             )}
 
-            {/* ── Top Parts & Services ── */}
             {topParts.length > 0 && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <Package className="w-4 h-4 text-brand-mid" />
                   <p className="text-xs font-bold text-brand-mid uppercase tracking-wide">
-                    Top Parts &amp; Services
+                    {t('income.topParts')}
                   </p>
                 </div>
                 <div className="space-y-2.5">
@@ -367,7 +402,7 @@ export default function IncomeDashboard() {
             {/* ── Recent bills ── */}
             <div>
               <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-2">
-                Recent Bills
+                {t('income.recentBills')}
               </p>
               <div className="space-y-2">
                 {[...bills].reverse().slice(0, 15).map((bill) => (
@@ -377,13 +412,13 @@ export default function IncomeDashboard() {
                     onClick={() => navigate(`/bill/${bill.id}`)}
                   >
                     <div className="min-w-0">
-                      <p className="font-semibold text-brand-dark text-sm truncate">
-                        {bill.customerName || bill.vehicleNo || '—'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        #{bill.billNumber} · {bill.vehicleNo}
-                      </p>
-                    </div>
+                        <p className="font-semibold text-brand-dark text-sm truncate">
+                          {bill.customerName || bill.vehicleNo || '—'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          #{bill.billNumber} · {bill.vehicleNo || t('common.na')}
+                        </p>
+                      </div>
                     <div className="text-right shrink-0 ml-2">
                       <p className="font-bold text-brand-dark text-sm">
                         ₹{(bill.grandTotal || 0).toLocaleString('en-IN')}

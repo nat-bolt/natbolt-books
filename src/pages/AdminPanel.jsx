@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { useTranslation } from 'react-i18next';
 import {
-  Plus, Store, Crown, RefreshCw, LogOut, ChevronRight, X,
+  Plus, Store, RefreshCw, LogOut, ChevronRight, X,
   BarChart2, MapPin, Package, TrendingUp, ChevronDown, ChevronUp,
   ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive, ArrowRight,
 } from 'lucide-react';
@@ -11,6 +11,9 @@ import { auth } from '../firebase';
 import { supabase, mapShop } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
+import InlineNotice from '../components/InlineNotice';
+import ConfirmSheet from '../components/ConfirmSheet';
+import StatusBadge from '../components/StatusBadge';
 import { FREE_BILL_LIMIT } from '../config';
 import { UNIQUE_CITIES } from '../data/cities';
 import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../utils/shopAddress';
@@ -868,17 +871,27 @@ export default function AdminPanel() {
   const navigate = useNavigate();
   const { user, isAdmin, authLoading, setUser, setShop, setIsAdmin } = useStore();
 
-  const [shops, setShops]     = useState([]);
+  const [shops, setShops] = useState([]);
   const [deactivatedShops, setDeactivatedShops] = useState([]);
-  const [showDeactivated, setShowDeactivated]   = useState(false);
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal]     = useState(null); // null | 'create' | shop object
+  const [modal, setModal] = useState(null); // null | 'create' | shop object
+  const [busyShopId, setBusyShopId] = useState(null);
+  const [busyAction, setBusyAction] = useState('');
+  const [notice, setNotice] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     if (authLoading) return;
     if (!isAdmin) return;
     loadShops();
   }, [authLoading, isAdmin]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeoutId = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   const loadShops = async () => {
     setLoading(true);
@@ -908,6 +921,11 @@ export default function AdminPanel() {
   };
 
   const handleShopSaved = (saved) => {
+    setNotice({
+      tone: 'success',
+      title: modal === 'create' ? 'Shop registered' : 'Shop updated',
+      body: `${saved.shopName || 'Shop'} is ready in the admin list.`,
+    });
     setShops((prev) => {
       const idx = prev.findIndex((s) => s.id === saved.id);
       if (idx >= 0) {
@@ -921,36 +939,69 @@ export default function AdminPanel() {
 
   const togglePlan = async (shop) => {
     const newPlan = shop.plan === 'paid' ? 'free' : 'paid';
-    const { error } = await supabase
-      .from('shops')
-      .update({ plan: newPlan, updated_at: new Date().toISOString() })
-      .eq('id', shop.id);
+    setBusyShopId(shop.id);
+    setBusyAction('plan');
+    try {
+      const { error } = await supabase
+        .from('shops')
+        .update({ plan: newPlan, updated_at: new Date().toISOString() })
+        .eq('id', shop.id);
 
-    if (!error) {
+      if (error) throw error;
+
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, plan: newPlan } : s));
+      setNotice({
+        tone: 'success',
+        title: newPlan === 'paid' ? 'Plan upgraded' : 'Plan downgraded',
+        body: `${shop.shopName} is now on the ${newPlan === 'paid' ? 'Paid' : 'Free'} plan.`,
+      });
+    } catch (err) {
+      console.error('[AdminPanel] toggle plan error:', err);
+      setNotice({
+        tone: 'danger',
+        title: 'Plan update failed',
+        body: err.message || 'Please try again.',
+      });
+    } finally {
+      setBusyShopId(null);
+      setBusyAction('');
     }
   };
 
   const resetBillCount = async (shop) => {
-    const { error } = await supabase
-      .from('shops')
-      .update({ bills_this_month: 0, updated_at: new Date().toISOString() })
-      .eq('id', shop.id);
+    setBusyShopId(shop.id);
+    setBusyAction('reset');
+    try {
+      const { error } = await supabase
+        .from('shops')
+        .update({ bills_this_month: 0, updated_at: new Date().toISOString() })
+        .eq('id', shop.id);
 
-    if (!error) {
+      if (error) throw error;
+
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, billsThisMonth: 0 } : s));
+      setNotice({
+        tone: 'success',
+        title: 'Bill count reset',
+        body: `${shop.shopName} can start a fresh Free-plan billing cycle.`,
+      });
+    } catch (err) {
+      console.error('[AdminPanel] reset bill count error:', err);
+      setNotice({
+        tone: 'danger',
+        title: 'Reset failed',
+        body: err.message || 'Please try again.',
+      });
+    } finally {
+      setBusyShopId(null);
+      setBusyAction('');
     }
   };
 
   const deactivateShop = async (shop) => {
-    // Confirmation dialog
-    const shopName = shop.shopName || 'this shop';
-    const confirmMsg = `Deactivate ${shopName}?\n\nThis will:\n• Mark the shop as inactive\n• Prevent shop owner from logging in\n• Hide shop from active list\n• Preserve all data for audit/regulatory purposes\n\nData will be retained for compliance and can be reactivated if needed.`;
-
-    if (!confirm(confirmMsg)) return;
-
+    setBusyShopId(shop.id);
+    setBusyAction('deactivate');
     try {
-      // Soft delete: mark as inactive with deletion timestamp
       const { error } = await supabase
         .from('shops')
         .update({
@@ -961,24 +1012,29 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      // Reload to refresh both active and deactivated lists
-      loadShops();
-
-      alert(`${shopName} has been deactivated.\n\nAll data is preserved for audit purposes and can be reactivated if needed.`);
+      await loadShops();
+      setNotice({
+        tone: 'warning',
+        title: 'Shop deactivated',
+        body: `${shop.shopName} is now hidden from the active list and can be restored later.`,
+      });
     } catch (err) {
       console.error('[AdminPanel] deactivate shop error:', err);
-      alert(`Failed to deactivate shop: ${err.message}`);
+      setNotice({
+        tone: 'danger',
+        title: 'Deactivate failed',
+        body: err.message || 'Please try again.',
+      });
+    } finally {
+      setBusyShopId(null);
+      setBusyAction('');
     }
   };
 
   const reactivateShop = async (shop) => {
-    const shopName = shop.shopName || 'this shop';
-    const confirmMsg = `Reactivate ${shopName}?\n\nThis will:\n• Restore shop to active status\n• Allow shop owner to log in again\n• Show shop in active list`;
-
-    if (!confirm(confirmMsg)) return;
-
+    setBusyShopId(shop.id);
+    setBusyAction('reactivate');
     try {
-      // Clear deleted_at timestamp to reactivate
       const { error } = await supabase
         .from('shops')
         .update({
@@ -989,13 +1045,22 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      // Reload to refresh both active and deactivated lists
-      loadShops();
-
-      alert(`${shopName} has been reactivated successfully.`);
+      await loadShops();
+      setNotice({
+        tone: 'success',
+        title: 'Shop reactivated',
+        body: `${shop.shopName} is back in the active list.`,
+      });
     } catch (err) {
       console.error('[AdminPanel] reactivate shop error:', err);
-      alert(`Failed to reactivate shop: ${err.message}`);
+      setNotice({
+        tone: 'danger',
+        title: 'Reactivate failed',
+        body: err.message || 'Please try again.',
+      });
+    } finally {
+      setBusyShopId(null);
+      setBusyAction('');
     }
   };
 
@@ -1047,6 +1112,11 @@ export default function AdminPanel() {
       )}
     >
       <div className="p-4 space-y-4 pb-8">
+        {notice ? (
+          <InlineNotice tone={notice.tone} title={notice.title} compact>
+            {notice.body}
+          </InlineNotice>
+        ) : null}
 
         {/* ── Stats grid (4 cards) ── */}
         <div className="grid grid-cols-2 gap-3">
@@ -1115,17 +1185,18 @@ export default function AdminPanel() {
             <div className="space-y-2">
               {shops.map((shop) => (
                 <div key={shop.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-brand-dark truncate">{shop.shopName}</p>
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${
-                          shop.plan === 'paid'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {shop.plan === 'paid' ? '⭐ Paid' : '🆓 Free'}
-                        </span>
+                        <StatusBadge variant={shop.plan === 'paid' ? 'paid' : 'neutral'}>
+                          {shop.plan === 'paid' ? 'Paid' : 'Free'}
+                        </StatusBadge>
+                        {shop.plan === 'free' ? (
+                          <StatusBadge variant="warning">
+                            {shop.billsThisMonth || 0}/{FREE_LIMIT} bills
+                          </StatusBadge>
+                        ) : null}
                       </div>
                       <p className="text-sm text-gray-500">{shop.ownerName}</p>
                       <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
@@ -1148,47 +1219,58 @@ export default function AdminPanel() {
                         )}
                       </div>
 
-                      {shop.plan === 'free' && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          Bills this month: {shop.billsThisMonth || 0} / {FREE_LIMIT}
-                        </p>
-                      )}
                     </div>
                     <button
-                      className="ml-2 p-1.5 text-gray-400 flex-shrink-0"
+                      className="inline-flex items-center gap-1 rounded-xl border border-[#E8DED3] bg-[#F8F3EC] px-2.5 py-2 text-xs font-semibold text-brand-dark shadow-sm"
                       onClick={() => setModal(shop)}
                     >
+                      Edit
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
 
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold ${
-                        shop.plan === 'paid'
-                          ? 'bg-gray-100 text-gray-600'
-                          : 'bg-amber-50 text-amber-600 border border-amber-200'
-                      }`}
-                      onClick={() => togglePlan(shop)}
-                    >
-                      {shop.plan === 'paid' ? 'Downgrade to Free' : '⭐ Upgrade to Paid'}
-                    </button>
-                    {shop.plan === 'free' && (
+                  {shop.plan === 'paid' ? (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
-                        className="flex-1 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200"
-                        onClick={() => resetBillCount(shop)}
+                        className="w-full rounded-xl py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-200"
+                        onClick={() => setConfirmState({ type: 'deactivate', shop })}
+                        disabled={busyShopId === shop.id && busyAction === 'deactivate'}
                       >
-                        Reset Bill Count
+                        {busyShopId === shop.id && busyAction === 'deactivate' ? 'Deactivating...' : 'Deactivate Shop'}
                       </button>
-                    )}
-                    <button
-                      className="p-2 rounded-xl text-red-500 bg-red-50 border border-red-200 flex-shrink-0"
-                      onClick={() => deactivateShop(shop)}
-                      title="Deactivate shop"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                      <button
+                        className="w-full rounded-xl py-2 text-xs font-bold bg-gray-100 text-gray-600"
+                        onClick={() => togglePlan(shop)}
+                        disabled={busyShopId === shop.id && busyAction === 'plan'}
+                      >
+                        {busyShopId === shop.id && busyAction === 'plan' ? 'Updating...' : 'Downgrade to Free'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button
+                        className="w-full rounded-xl py-2 text-xs font-bold bg-amber-50 text-amber-600 border border-amber-200"
+                        onClick={() => togglePlan(shop)}
+                        disabled={busyShopId === shop.id && busyAction === 'plan'}
+                      >
+                        {busyShopId === shop.id && busyAction === 'plan' ? 'Updating...' : 'Upgrade to Paid'}
+                      </button>
+                      <button
+                        className="w-full rounded-xl py-2 text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200"
+                        onClick={() => setConfirmState({ type: 'reset', shop })}
+                        disabled={busyShopId === shop.id && busyAction === 'reset'}
+                      >
+                        {busyShopId === shop.id && busyAction === 'reset' ? 'Resetting...' : 'Reset Bill Count'}
+                      </button>
+                      <button
+                        className="w-full rounded-xl py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-200"
+                        onClick={() => setConfirmState({ type: 'deactivate', shop })}
+                        disabled={busyShopId === shop.id && busyAction === 'deactivate'}
+                      >
+                        {busyShopId === shop.id && busyAction === 'deactivate' ? 'Deactivating...' : 'Deactivate Shop'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1223,9 +1305,9 @@ export default function AdminPanel() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-gray-700 truncate">{shop.shopName}</p>
-                          <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-red-100 text-red-600 flex-shrink-0">
+                          <StatusBadge variant="danger">
                             Deactivated
-                          </span>
+                          </StatusBadge>
                         </div>
                         <p className="text-sm text-gray-500">{shop.ownerName}</p>
                         <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
@@ -1241,10 +1323,11 @@ export default function AdminPanel() {
 
                     <button
                       className="w-full mt-3 py-2 rounded-xl text-xs font-bold bg-green-50 text-green-600 border border-green-200 flex items-center justify-center gap-1.5"
-                      onClick={() => reactivateShop(shop)}
+                      onClick={() => setConfirmState({ type: 'reactivate', shop })}
+                      disabled={busyShopId === shop.id && busyAction === 'reactivate'}
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      Reactivate Shop
+                      {busyShopId === shop.id && busyAction === 'reactivate' ? 'Reactivating...' : 'Reactivate Shop'}
                     </button>
                   </div>
                 ))}
@@ -1262,6 +1345,51 @@ export default function AdminPanel() {
           onClose={() => setModal(null)}
         />
       )}
+
+      <ConfirmSheet
+        open={!!confirmState}
+        title={
+          confirmState?.type === 'deactivate'
+            ? `Deactivate ${confirmState.shop?.shopName || 'shop'}?`
+            : confirmState?.type === 'reactivate'
+              ? `Reactivate ${confirmState.shop?.shopName || 'shop'}?`
+              : confirmState?.type === 'reset'
+                ? `Reset bill count for ${confirmState.shop?.shopName || 'shop'}?`
+                : ''
+        }
+        body={
+          confirmState?.type === 'deactivate'
+            ? 'This hides the shop from the active list, blocks shop-owner login, and keeps all data for audit and recovery.'
+            : confirmState?.type === 'reactivate'
+              ? 'This returns the shop to the active list and allows the shop owner to log in again.'
+              : confirmState?.type === 'reset'
+                ? 'This clears the Free-plan bill counter for the current month so the shop can keep billing.'
+                : ''
+        }
+        confirmLabel={
+          confirmState?.type === 'deactivate'
+            ? 'Deactivate Shop'
+            : confirmState?.type === 'reactivate'
+              ? 'Reactivate Shop'
+              : confirmState?.type === 'reset'
+                ? 'Reset Bill Count'
+                : 'Confirm'
+        }
+        tone={confirmState?.type === 'deactivate' ? 'danger' : 'warning'}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={async () => {
+          const nextConfirm = confirmState;
+          setConfirmState(null);
+          if (!nextConfirm?.shop) return;
+          if (nextConfirm.type === 'deactivate') {
+            await deactivateShop(nextConfirm.shop);
+          } else if (nextConfirm.type === 'reactivate') {
+            await reactivateShop(nextConfirm.shop);
+          } else if (nextConfirm.type === 'reset') {
+            await resetBillCount(nextConfirm.shop);
+          }
+        }}
+      />
     </Layout>
   );
 }

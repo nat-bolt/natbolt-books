@@ -15,9 +15,6 @@ export const VEHICLE_TYPES = [
   { value: 'scooter',  label: 'Scooter' },
   { value: 'moped',    label: 'Moped' },
   { value: 'electric', label: 'Electric' },
-  { value: 'auto',     label: 'Auto' },
-  { value: 'car',      label: 'Car' },
-  { value: 'truck',    label: 'Truck' },
   { value: 'other',    label: 'Other' },
 ];
 
@@ -35,13 +32,6 @@ export const VEHICLE_BRANDS = {
     'Ather', 'Bajaj', 'Hero Electric', 'Okinawa',
     'Ola Electric', 'Pure EV', 'TVS',
   ],
-  auto: ['Bajaj', 'Mahindra', 'Piaggio', 'TVS'],
-  car: [
-    'Ford', 'Honda', 'Hyundai', 'Kia', 'Mahindra',
-    'Maruti Suzuki', 'MG', 'Nissan', 'Renault',
-    'Skoda', 'Tata', 'Toyota', 'Volkswagen',
-  ],
-  truck: ['Ashok Leyland', 'Bharat Benz', 'Eicher', 'Mahindra', 'Tata'],
   other: [],
 };
 
@@ -83,44 +73,10 @@ export const VEHICLE_MODELS = {
   'Okinawa': ['Dual', 'Praise Pro', 'Ridge+', 'R30'],
   'Ola Electric': ['S1', 'S1 Air', 'S1 Pro'],
   'Pure EV': ['ePluto 7G', 'eTryst 350', 'Etrance Neo'],
+  "TVS": ['iQube', 'Creon', 'Zest', 'Apollo', 'Metro'],
+  "other": [],
 
-  // ── Autos ─────────────────────────────────────────────────────────────────
-  // Bajaj + Mahindra + TVS + Piaggio — models handled by brand shared above
 
-  // ── Cars ──────────────────────────────────────────────────────────────────
-  'Ford': ['EcoSport', 'Endeavour', 'Figo', 'Freestyle'],
-  'Hyundai': [
-    'Alcazar', 'Aura', 'Creta', 'Grand i10 Nios',
-    'i10', 'i20', 'Tucson', 'Venue', 'Verna',
-  ],
-  'Kia': ['Carens', 'Carnival', 'Seltos', 'Sonet'],
-  'Mahindra': [
-    'Bolero', 'Scorpio', 'Scorpio-N', 'Thar',
-    'XUV300', 'XUV400', 'XUV700', 'Xylo',
-  ],
-  'Maruti Suzuki': [
-    'Alto', 'Alto K10', 'Baleno', 'Brezza',
-    'Celerio', 'Dzire', 'Ertiga', 'Fronx',
-    'Grand Vitara', 'S-Presso', 'Swift', 'WagonR',
-  ],
-  'MG': ['Astor', 'Comet EV', 'Gloster', 'Hector', 'ZS EV'],
-  'Nissan': ['Kicks', 'Magnite', 'Terrano'],
-  'Renault': ['Duster', 'Kiger', 'Kwid', 'Triber'],
-  'Skoda': ['Kushaq', 'Octavia', 'Rapid', 'Slavia', 'Superb'],
-  'Tata': [
-    'Ace', 'Altroz', 'Harrier', 'Nexon',
-    'Nexon EV', 'Punch', 'Safari', 'Tigor', 'Tiago',
-  ],
-  'Toyota': [
-    'Camry', 'Fortuner', 'Glanza', 'Hilux',
-    'Innova Crysta', 'Innova HyCross', 'Urban Cruiser Hyryder',
-  ],
-  'Volkswagen': ['Polo', 'Taigun', 'Tiguan', 'Vento', 'Virtus'],
-
-  // ── Trucks ────────────────────────────────────────────────────────────────
-  'Ashok Leyland': ['Boss 1616', 'Captain 3718', 'Dost', 'Dost Strong', 'Partner'],
-  'Bharat Benz': ['1214R', '1617R', '2523R', '3128R'],
-  'Eicher': ['Pro 2049', 'Pro 3015', 'Pro 6028', 'Pro 8031'],
 };
 
 /**

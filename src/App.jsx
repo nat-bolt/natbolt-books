@@ -1,28 +1,69 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Toaster } from 'react-hot-toast';
 import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
+import { SpeedInsights, computeRoute } from '@vercel/speed-insights/react';
 import { auth } from './firebase';
 import { supabase, mapShop } from './supabase';
 import './i18n/index';
 import useStore from './store/useStore';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// Pages
-import Login            from './pages/Login';  // ← Firebase Phone Auth (reverted from MSG91)
-import Pending          from './pages/Pending';
-import AdminPanel       from './pages/AdminPanel';
-import Dashboard        from './pages/Dashboard';
-import NewEstimate      from './pages/NewEstimate';
-import EstimateDetail   from './pages/EstimateDetail';
-import BillDetail       from './pages/BillDetail';
-import CustomerList     from './pages/CustomerList';
-import CustomerProfile  from './pages/CustomerProfile';
-import PartsCatalogue   from './pages/PartsCatalogue';
-import IncomeDashboard  from './pages/IncomeDashboard';
-import Settings         from './pages/Settings';
+const Login = lazy(() => import('./pages/Login'));
+const Pending = lazy(() => import('./pages/Pending'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const NewEstimate = lazy(() => import('./pages/NewEstimate'));
+const EstimateDetail = lazy(() => import('./pages/EstimateDetail'));
+const BillDetail = lazy(() => import('./pages/BillDetail'));
+const CustomerList = lazy(() => import('./pages/CustomerList'));
+const CustomerProfile = lazy(() => import('./pages/CustomerProfile'));
+const PartsCatalogue = lazy(() => import('./pages/PartsCatalogue'));
+const IncomeDashboard = lazy(() => import('./pages/IncomeDashboard'));
+const Settings = lazy(() => import('./pages/Settings'));
+
+const SPEED_INSIGHTS_ROUTES = [
+  '/login',
+  '/pending',
+  '/admin',
+  '/',
+  '/estimate/new',
+  '/estimate/:id',
+  '/bill/:id',
+  '/customers',
+  '/customers/:id',
+  '/parts',
+  '/income',
+  '/settings',
+];
+
+function SpeedInsightsWithRoute() {
+  const location = useLocation();
+  const match = SPEED_INSIGHTS_ROUTES
+    .map((path) => ({ path, match: matchPath({ path, end: true }, location.pathname) }))
+    .find(({ match }) => Boolean(match));
+
+  const route = match?.match
+    ? computeRoute(location.pathname, match.match.params)
+    : undefined;
+
+  return <SpeedInsights route={route} />;
+}
+
+function RouteFallback() {
+  return (
+    <div
+      className="flex items-center justify-center bg-[#F8F3EC]"
+      style={{ minHeight: 'var(--app-height, 100dvh)' }}
+    >
+      <div className="flex flex-col items-center gap-3 px-6 text-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-mid border-t-transparent" />
+        <p className="text-sm font-medium text-gray-500">Loading…</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const { setUser, setShop, setIsAdmin, setAuthLoading } = useStore();
@@ -89,53 +130,55 @@ export default function App() {
         toastOptions={{ duration: 2500, style: { borderRadius: '12px', fontWeight: '600' } }}
       />
       <Analytics />
-      <SpeedInsights />
-      <Routes>
-        {/* Public */}
-        <Route path="/login"   element={<Login />} />
-        <Route path="/pending" element={<ProtectedRoute><Pending /></ProtectedRoute>} />
-        <Route path="/admin"   element={<ProtectedRoute requireAdmin><AdminPanel /></ProtectedRoute>} />
+      <SpeedInsightsWithRoute />
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          {/* Public */}
+          <Route path="/login"   element={<Login />} />
+          <Route path="/pending" element={<ProtectedRoute><Pending /></ProtectedRoute>} />
+          <Route path="/admin"   element={<ProtectedRoute requireAdmin><AdminPanel /></ProtectedRoute>} />
 
-        {/* Shop-protected routes */}
-        <Route path="/" element={
-          <ProtectedRoute requireShop><Dashboard /></ProtectedRoute>
-        } />
-        <Route path="/estimate/new" element={
-          <ProtectedRoute requireShop><NewEstimate /></ProtectedRoute>
-        } />
-        <Route path="/estimate/:id" element={
-          <ProtectedRoute requireShop><EstimateDetail /></ProtectedRoute>
-        } />
-        <Route path="/bill/:id" element={
-          <ProtectedRoute requireShop><BillDetail /></ProtectedRoute>
-        } />
+          {/* Shop-protected routes */}
+          <Route path="/" element={
+            <ProtectedRoute requireShop><Dashboard /></ProtectedRoute>
+          } />
+          <Route path="/estimate/new" element={
+            <ProtectedRoute requireShop><NewEstimate /></ProtectedRoute>
+          } />
+          <Route path="/estimate/:id" element={
+            <ProtectedRoute requireShop><EstimateDetail /></ProtectedRoute>
+          } />
+          <Route path="/bill/:id" element={
+            <ProtectedRoute requireShop><BillDetail /></ProtectedRoute>
+          } />
 
-        {/* Customers */}
-        <Route path="/customers" element={
-          <ProtectedRoute requireShop><CustomerList /></ProtectedRoute>
-        } />
-        <Route path="/customers/:id" element={
-          <ProtectedRoute requireShop><CustomerProfile /></ProtectedRoute>
-        } />
+          {/* Customers */}
+          <Route path="/customers" element={
+            <ProtectedRoute requireShop><CustomerList /></ProtectedRoute>
+          } />
+          <Route path="/customers/:id" element={
+            <ProtectedRoute requireShop><CustomerProfile /></ProtectedRoute>
+          } />
 
-        {/* Parts catalogue */}
-        <Route path="/parts" element={
-          <ProtectedRoute requireShop><PartsCatalogue /></ProtectedRoute>
-        } />
+          {/* Parts catalogue */}
+          <Route path="/parts" element={
+            <ProtectedRoute requireShop><PartsCatalogue /></ProtectedRoute>
+          } />
 
-        {/* Income dashboard (paid feature — gate is inside the component) */}
-        <Route path="/income" element={
-          <ProtectedRoute requireShop><IncomeDashboard /></ProtectedRoute>
-        } />
+          {/* Income dashboard (paid feature — gate is inside the component) */}
+          <Route path="/income" element={
+            <ProtectedRoute requireShop><IncomeDashboard /></ProtectedRoute>
+          } />
 
-        {/* Settings */}
-        <Route path="/settings" element={
-          <ProtectedRoute requireShop><Settings /></ProtectedRoute>
-        } />
+          {/* Settings */}
+          <Route path="/settings" element={
+            <ProtectedRoute requireShop><Settings /></ProtectedRoute>
+          } />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

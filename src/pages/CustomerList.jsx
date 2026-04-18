@@ -141,20 +141,24 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-end z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-end z-[80]" onClick={onClose}>
       <div
-        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl p-5 max-h-[92vh] overflow-y-auto"
+        className="bg-white w-full max-w-lg mx-auto rounded-t-3xl px-5 pt-5 max-h-[92vh] overflow-y-auto shadow-2xl"
+        style={{
+          maxHeight: 'calc(var(--app-height) - var(--safe-top) - 24px)',
+          paddingBottom: 'calc(var(--safe-bottom) + 32px)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="sticky top-0 z-10 -mx-5 mb-5 flex items-center justify-between bg-white px-5 pb-3 pt-1">
           <h2 className="text-lg font-bold text-brand-dark">Add Customer</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
         {/* ── Customer details ───────────────────────────────────────────── */}
         <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-3">
-          Customer Details
+          Customer & Vehicle Details
         </p>
         <div className="space-y-3">
           <div>
@@ -182,12 +186,6 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
 
         {/* ── Vehicle details ────────────────────────────────────────────── */}
         <div className="mt-5 pt-4 border-t border-gray-100">
-          <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1">
-            Vehicle Details
-          </p>
-          <p className="text-xs text-gray-400 mb-3">
-            Optional — add their vehicle now or from the customer profile later
-          </p>
 
           <div className="space-y-3">
             {/* Vehicle Number */}

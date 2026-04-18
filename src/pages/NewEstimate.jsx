@@ -49,7 +49,7 @@ function getPartName(part, language) {
 // ── Vehicle type emoji ─────────────────────────────────────────────────────────
 const TYPE_EMOJI = {
   bike: '🏍️', scooter: '🛵', moped: '🛵', electric: '⚡',
-  auto: '🛺', car: '🚗', truck: '🚛', other: '🚘',
+  other: '🚘',
 };
 const NEW_VEHICLE_ID = '__new__';
 const DRAFT_STORAGE_VERSION = 1;
