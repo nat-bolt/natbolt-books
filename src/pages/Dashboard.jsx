@@ -15,6 +15,7 @@ import { exportBillsCSV } from '../utils/exportCsv';
 import { FREE_BILL_LIMIT } from '../config';
 
 const FREE_LIMIT = FREE_BILL_LIMIT;
+const DASHBOARD_CACHE_PREFIX = 'nb_dashboard_snapshot_v1';
 
 // ── Upgrade modal (shown when free user taps a paid feature) ──────────────────
 function UpgradeModal({ feature, onClose, onUpgrade }) {
@@ -75,11 +76,29 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!shop) return;
-    loadData();
+    const cacheKey = `${DASHBOARD_CACHE_PREFIX}:${shop.id}`;
+    let hasCachedSnapshot = false;
+
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (Array.isArray(cached?.bills)) setBills(cached.bills);
+        if (cached?.stats) setStats(cached.stats);
+        setLoading(false);
+        hasCachedSnapshot = true;
+      }
+    } catch {
+      // Ignore cache parse errors; fresh network data will replace it.
+    }
+
+    loadData(cacheKey, hasCachedSnapshot);
   }, [shop]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (cacheKey, backgroundRefresh = false) => {
+    if (!backgroundRefresh) {
+      setLoading(true);
+    }
     try {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -106,7 +125,8 @@ export default function Dashboard() {
       if (listResult.error) throw listResult.error;
       if (statsResult.error) throw statsResult.error;
 
-      setBills((listResult.data || []).map(mapBill));
+      const mappedBills = (listResult.data || []).map(mapBill);
+      setBills(mappedBills);
 
       // Compute accurate stats from the full month dataset
       let todayCount = 0, monthCount = 0, revenue = 0;
@@ -118,11 +138,21 @@ export default function Dashboard() {
           revenue += Number(b.grand_total || 0);
         }
       });
-      setStats({ today: todayCount, month: monthCount, revenue });
+      const nextStats = { today: todayCount, month: monthCount, revenue };
+      setStats(nextStats);
+
+      if (cacheKey) {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          bills: mappedBills,
+          stats: nextStats,
+        }));
+      }
     } catch (err) {
       console.error('Dashboard loadData error:', err);
     } finally {
-      setLoading(false);
+      if (!backgroundRefresh) {
+        setLoading(false);
+      }
     }
   };
 
@@ -375,8 +405,22 @@ export default function Dashboard() {
             </div>
           </div>
           {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="w-8 h-8 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+            <div className="card py-5">
+              <div className="space-y-3 animate-pulse">
+                {[0, 1].map((index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-2xl bg-brand-light" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="h-3 w-32 rounded-full bg-gray-200" />
+                      <div className="h-3 w-24 rounded-full bg-gray-100" />
+                    </div>
+                    <div className="space-y-2 text-right">
+                      <div className="h-3 w-16 rounded-full bg-gray-200" />
+                      <div className="h-3 w-10 rounded-full bg-gray-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : visibleBills.length === 0 ? (
             <div className="card py-10 text-center">

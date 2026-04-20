@@ -1,10 +1,12 @@
 import { Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import useStore from '../store/useStore';
 
 // requireAdmin = true  →  only admins (books.admins table) can access
 // requireShop  = true  →  shop owner must have a registered shop; admins are
 //                          redirected to /admin instead of /pending
 export default function ProtectedRoute({ children, requireShop = false, requireAdmin = false }) {
+  const { t } = useTranslation();
   const { user, shop, isAdmin, authLoading } = useStore();
 
   if (authLoading) {
@@ -12,8 +14,8 @@ export default function ProtectedRoute({ children, requireShop = false, requireA
       <div className="min-h-screen flex items-center justify-center bg-brand-light">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-brand-mid border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-brand-dark font-medium">NatBolt Billu</p>
-          <p className="text-sm text-gray-400 mt-1">Just a moment…</p>
+          <p className="text-brand-dark font-medium">{t('appName')}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('common.justAMoment')}</p>
         </div>
       </div>
     );

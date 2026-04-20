@@ -14,6 +14,19 @@
 
     <!-- Brand display font — Dagger Square loaded via @font-face in index.css -->
     <!-- Source: /public/fonts/daggersquare.ttf (self-hosted, no external dependency) -->
+    <link rel="preload" href="/fonts/daggersquare.ttf" as="font" type="font/ttf" crossorigin />
+    <script>
+      (function () {
+        function setAppHeight() {
+          document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+        }
+        setAppHeight();
+        window.addEventListener('resize', setAppHeight, { passive: true });
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', setAppHeight, { passive: true });
+        }
+      })();
+    </script>
 
 
     <!-- Favicon / browser tab (icon only, no text) -->

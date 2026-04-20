@@ -7,10 +7,12 @@ import { supabase, mapBill, mapCustomer } from '../supabase';
 import useStore from '../store/useStore';
 import Layout from '../components/Layout';
 import CatalogueModal from '../components/CatalogueModal';
+import ConfirmSheet from '../components/ConfirmSheet';
 import DocumentEditPanel from '../components/DocumentEditPanel';
 import DocumentItemsCard from '../components/DocumentItemsCard';
 import DocumentPreviewLayer from '../components/DocumentPreviewLayer';
 import DocumentTotalsCard from '../components/DocumentTotalsCard';
+import InlineNotice from '../components/InlineNotice';
 import StickyActionBar from '../components/StickyActionBar';
 import WhatsAppIcon from '../components/WhatsAppIcon';
 import StatusBadge from '../components/StatusBadge';
@@ -40,6 +42,8 @@ export default function BillDetail() {
   const [catalogue, setCatalogue]   = useState([]);
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [editJobPhotoFile, setEditJobPhotoFile] = useState(null);
   const [editJobPhotoPreview, setEditJobPhotoPreview] = useState('');
   const [editJobPhotoRemoved, setEditJobPhotoRemoved] = useState(false);
@@ -156,14 +160,21 @@ export default function BillDetail() {
   };
 
   const handleVoid = async () => {
-    if (!confirm(t('bill.voidConfirm'))) return;
-    const { error } = await supabase
-      .from('bills')
-      .update({ status: 'void' })
-      .eq('id', id)
-      .eq('shop_id', shop.id);
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .update({ status: 'void' })
+        .eq('id', id)
+        .eq('shop_id', shop.id);
 
-    if (!error) setBill((b) => ({ ...b, status: 'void' }));
+      if (error) throw error;
+
+      setBill((b) => ({ ...b, status: 'void' }));
+      setFeedback({ tone: 'success', title: t('bill.voidBill'), body: t('bill.voidSuccess') });
+    } catch (err) {
+      console.error('Bill void failed:', err);
+      setFeedback({ tone: 'danger', title: t('common.error'), body: err.message || t('bill.voidFailed') });
+    }
   };
 
   // ── Edit mode functions ──────────────────────────────────────────────────────
@@ -349,7 +360,11 @@ export default function BillDetail() {
       `Thank you! 🙏\nPowered by NatBolt Billu`;
 
     if (!phone) {
-      alert('Customer phone number is missing.');
+      setFeedback({
+        tone: 'warning',
+        title: t('bill.phoneMissingTitle'),
+        body: t('bill.phoneMissingBody'),
+      });
       return;
     }
 
@@ -363,8 +378,56 @@ export default function BillDetail() {
 
   if (loading) return (
     <Layout showBack title={t('bill.title')}>
-      <div className="flex justify-center py-16">
-        <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+      <div className="p-4 space-y-4 pb-40 animate-pulse">
+        <div className="h-12 rounded-xl bg-red-100/70" />
+        <div className="card">
+          <div className="mb-4 flex items-start justify-between">
+            <div className="space-y-2">
+              <div className="h-5 w-32 rounded-full bg-gray-200" />
+              <div className="h-3 w-20 rounded-full bg-gray-100" />
+            </div>
+            <div className="h-8 w-24 rounded-full bg-gray-100" />
+          </div>
+          <div className="space-y-3 border-t border-gray-100 pt-3">
+            {[0, 1, 2, 3].map((idx) => (
+              <div key={idx} className="flex items-center justify-between gap-3">
+                <div className="h-3 w-20 rounded-full bg-gray-100" />
+                <div className="h-3 w-28 rounded-full bg-gray-200" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="mb-3 h-4 w-24 rounded-full bg-gray-100" />
+          <div className="h-56 rounded-xl bg-gray-100" />
+        </div>
+        <div className="card space-y-3">
+          <div className="h-4 w-28 rounded-full bg-gray-100" />
+          {[0, 1, 2].map((idx) => (
+            <div key={idx} className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-brand-light" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3 w-32 rounded-full bg-gray-200" />
+                <div className="h-3 w-20 rounded-full bg-gray-100" />
+              </div>
+              <div className="h-3 w-16 rounded-full bg-gray-200" />
+            </div>
+          ))}
+        </div>
+        <div className="card space-y-3">
+          {[0, 1, 2].map((idx) => (
+            <div key={idx} className="flex items-center justify-between gap-3">
+              <div className="h-3 w-24 rounded-full bg-gray-100" />
+              <div className="h-3 w-16 rounded-full bg-gray-200" />
+            </div>
+          ))}
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-4 w-28 rounded-full bg-gray-200" />
+              <div className="h-4 w-20 rounded-full bg-gray-200" />
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );
@@ -421,6 +484,12 @@ export default function BillDetail() {
       />
 
       <div className="p-4 space-y-4 pb-40">
+        {feedback ? (
+          <InlineNotice tone={feedback.tone} title={feedback.title} compact>
+            {feedback.body}
+          </InlineNotice>
+        ) : null}
+
         {/* Status */}
         <div className={`flex items-center gap-2 p-3 rounded-xl font-semibold ${isPaid ? 'bg-green-50 text-green-700' : isVoid ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>
           {isPaid ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -461,7 +530,7 @@ export default function BillDetail() {
               <span className="font-medium">{bill.vehicleNo}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Vehicle</span>
+              <span className="text-gray-500">{t('pdf.vehicleType')}</span>
               <span className="font-medium">{bill.vehicleBrand} {bill.vehicleModel}</span>
             </div>
             <div className="flex justify-between text-sm">
@@ -527,29 +596,29 @@ export default function BillDetail() {
             photoInputRef={photoInputRef}
             onPhotoSelect={handleEditPhotoSelect}
             onPhotoRemove={handleRemoveEditPhoto}
-            photoTapLabel={t('estimate.photoTap')}
-            photoHelpLabel={t('estimate.photoHelp')}
-            photoPreparingLabel={t('estimate.photoPreparing')}
-            replacePhotoLabel={t('settings.replacePhoto')}
-            removePhotoLabel={t('settings.removePhoto')}
-            labourLabel="Labour Charges (₹)"
-            labourValue={editLabour}
-            onLabourChange={(e) => setEditLabour(e.target.value)}
-            onLabourKeyDown={handleEnterDismissKeyboard}
-            gstLabel="GST Bill (18%)"
-            isGST={editIsGST}
-            onToggleGST={() => setEditIsGST((g) => !g)}
-            totalRows={editTotalRows}
-            grandTotalLabel="Grand Total"
-            grandTotalValue={fmtCurrency(editGrandTotal)}
-            onCancel={() => setEditMode(false)}
-            onSave={handleSaveEdit}
-            saving={savingEdit}
-            cancelLabel={t('common.cancel')}
-            saveLabel="Save Changes"
-            savingLabel="Saving…"
-          />
-        )}
+              photoTapLabel={t('estimate.photoTap')}
+              photoHelpLabel={t('estimate.photoHelp')}
+              photoPreparingLabel={t('estimate.photoPreparing')}
+              replacePhotoLabel={t('settings.replacePhoto')}
+              removePhotoLabel={t('settings.removePhoto')}
+              labourLabel={t('estimate.labourWithCurrency')}
+              labourValue={editLabour}
+              onLabourChange={(e) => setEditLabour(e.target.value)}
+              onLabourKeyDown={handleEnterDismissKeyboard}
+              gstLabel={t('estimate.gstBillLabel')}
+              isGST={editIsGST}
+              onToggleGST={() => setEditIsGST((g) => !g)}
+              totalRows={editTotalRows}
+              grandTotalLabel={t('estimate.grandTotal')}
+              grandTotalValue={fmtCurrency(editGrandTotal)}
+              onCancel={() => setEditMode(false)}
+              onSave={handleSaveEdit}
+              saving={savingEdit}
+              cancelLabel={t('common.cancel')}
+              saveLabel={t('catalogue.saveChanges')}
+              savingLabel={t('estimate.savingChanges')}
+            />
+          )}
 
         {/* UPI QR */}
         {!isVoid && qrUrl && (
@@ -626,12 +695,18 @@ export default function BillDetail() {
               onClick={handlePreviewPDF}
               disabled={pdfLoading}
             >
-              <Eye className="w-4 h-4" /> {pdfLoading ? '…' : t('bill.viewPdf')}
+              {pdfLoading ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-mid border-t-transparent" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+              <span>{t('bill.viewPdf')}</span>
             </button>
             <button
               className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1fa855] px-4 text-sm font-semibold text-white active:scale-95"
               onClick={handleWhatsApp} disabled={pdfLoading}>
-              <WhatsAppIcon className="w-5 h-5" badge badgeClassName="p-1" /> WhatsApp
+              <WhatsAppIcon className="w-5 h-5" badge badgeClassName="p-1" />
+              <span>{t('common.whatsApp')}</span>
             </button>
           </div>
           {!isPaid && (
@@ -640,12 +715,24 @@ export default function BillDetail() {
             </button>
           )}
           {!isPaid && (
-            <button className="w-full text-red-500 text-sm font-medium py-2" onClick={handleVoid}>
+            <button className="w-full text-red-500 text-sm font-medium py-2" onClick={() => setShowVoidConfirm(true)}>
               {t('bill.voidBill')}
             </button>
           )}
         </StickyActionBar>
       )}
+
+      <ConfirmSheet
+        open={showVoidConfirm}
+        title={t('bill.voidBill')}
+        body={t('bill.voidConfirm')}
+        confirmLabel={t('bill.voidBill')}
+        onCancel={() => setShowVoidConfirm(false)}
+        onConfirm={async () => {
+          setShowVoidConfirm(false);
+          await handleVoid();
+        }}
+      />
     </Layout>
   );
 }

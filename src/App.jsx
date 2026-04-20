@@ -38,6 +38,41 @@ const SPEED_INSIGHTS_ROUTES = [
   '/settings',
 ];
 
+const USER_CONTEXT_CACHE_KEY = 'nb_user_context_v1';
+
+function readCachedUserContext(firebaseUser) {
+  if (!firebaseUser?.uid) return null;
+
+  try {
+    const raw = localStorage.getItem(USER_CONTEXT_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (parsed?.uid !== firebaseUser.uid) return null;
+
+    return {
+      isAdmin: Boolean(parsed.isAdmin),
+      shop: parsed.shop || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUserContext(firebaseUser, { isAdmin, shop }) {
+  if (!firebaseUser?.uid) return;
+
+  localStorage.setItem(USER_CONTEXT_CACHE_KEY, JSON.stringify({
+    uid: firebaseUser.uid,
+    isAdmin: Boolean(isAdmin),
+    shop: shop || null,
+  }));
+}
+
+function clearCachedUserContext() {
+  localStorage.removeItem(USER_CONTEXT_CACHE_KEY);
+}
+
 function SpeedInsightsWithRoute() {
   const location = useLocation();
   const match = SPEED_INSIGHTS_ROUTES
@@ -75,6 +110,15 @@ export default function App() {
       if (firebaseUser) {
         if (!isMounted) return;
         setUser(firebaseUser);
+        setShop(null);
+        setIsAdmin(false);
+
+        const cachedContext = readCachedUserContext(firebaseUser);
+        if (cachedContext) {
+          setIsAdmin(cachedContext.isAdmin);
+          setShop(cachedContext.shop);
+          setAuthLoading(false);
+        }
 
         try {
           // ── Single RPC resolves admin + shop in one round trip ───────────────
@@ -86,6 +130,8 @@ export default function App() {
             console.error('get_user_context error:', ctxErr.message);
           } else if (ctx?.is_admin) {
             setIsAdmin(true);
+            setShop(null);
+            writeCachedUserContext(firebaseUser, { isAdmin: true, shop: null });
           } else {
             setIsAdmin(false);
             if (ctx?.shop) {
@@ -95,9 +141,14 @@ export default function App() {
                 // Shop is deactivated - treat as no shop (will redirect to Pending)
                 setShop(null);
                 console.warn('[App] Shop is deactivated:', mappedShop.shopName);
+                writeCachedUserContext(firebaseUser, { isAdmin: false, shop: null });
               } else {
                 setShop(mappedShop);
+                writeCachedUserContext(firebaseUser, { isAdmin: false, shop: mappedShop });
               }
+            } else {
+              setShop(null);
+              writeCachedUserContext(firebaseUser, { isAdmin: false, shop: null });
             }
           }
         } catch (err) {
@@ -105,14 +156,16 @@ export default function App() {
             console.error('Auth init error:', err);
           }
         }
+        if (isMounted && !cachedContext) {
+          setAuthLoading(false);
+        }
       } else {
         // Signed out
         if (!isMounted) return;
         setUser(null);
         setShop(null);
         setIsAdmin(false);
-      }
-      if (isMounted) {
+        clearCachedUserContext();
         setAuthLoading(false);
       }
     });

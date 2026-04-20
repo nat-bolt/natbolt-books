@@ -47,26 +47,28 @@ export default function PdfPreviewModal({
         className="flex-1 min-h-0 bg-gray-100 overflow-y-auto"
         style={{ paddingBottom: 'calc(var(--screen-page-bottom) + 8px)' }}
       >
-        {loading ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-brand-dark">
-            <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-medium">{t('common.loading')}</p>
-          </div>
-        ) : previewImageUrl ? (
-          <div className="mx-auto w-full max-w-lg px-3 pt-5 pb-6">
-            <div className="mx-auto max-w-full rounded-[28px] bg-white shadow-lg border border-gray-200 p-3">
-              <img
-                src={previewImageUrl}
-                alt={t('bill.viewPdf')}
-                className="w-full h-auto rounded-2xl border border-gray-200 bg-white block"
-              />
+        <div className="mx-auto w-full max-w-lg px-3 pt-5 pb-6">
+          <div className="mx-auto max-w-full rounded-[28px] bg-white shadow-lg border border-gray-200 p-3">
+            <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white" style={{ aspectRatio: '148 / 210' }}>
+              {loading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-brand-dark">
+                  <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm font-medium">{t('common.loading')}</p>
+                </div>
+              ) : previewImageUrl ? (
+                <img
+                  src={previewImageUrl}
+                  alt={t('bill.viewPdf')}
+                  className="absolute inset-0 block h-full w-full object-contain bg-white"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-gray-500">
+                  {t('common.error')}
+                </div>
+              )}
             </div>
           </div>
-        ) : (
-          <div className="h-full flex items-center justify-center px-6 text-center text-sm text-gray-500">
-            {t('common.error')}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

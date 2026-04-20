@@ -21,17 +21,17 @@ function UpgradeWall({ onUpgrade }) {
         <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Lock className="w-10 h-10 text-amber-600" />
         </div>
-        <h2 className="text-xl font-bold text-brand-dark mb-2">Customer Profiles are a Paid Feature</h2>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">{t('customerProfile.paidFeatureTitle')}</h2>
         <p className="text-gray-500 text-sm mb-8 max-w-xs">
-          Upgrade to view detailed customer profiles, manage vehicle history, and unlock unlimited billing.
+          {t('customerProfile.paidFeatureBody')}
         </p>
         <div className="space-y-3 w-full max-w-sm">
           <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-            Save 38% • Limited Time Offer
+            {t('estimate.paidFeatureOffer')}
           </div>
           <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
             <Crown className="w-5 h-5" />
-            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+            <span>{t('dashboard.upgradeFeatureCta')}</span>
           </button>
         </div>
       </div>
@@ -58,6 +58,7 @@ function StatCard({ icon: Icon, label, value, color = 'text-brand-dark' }) {
 
 // ── Add Vehicle Modal ─────────────────────────────────────────────────────────
 function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     vehicle_no:    '',
     vehicle_type:  'scooter',
@@ -83,10 +84,11 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
 
   const brands = getBrandsForType(form.vehicle_type);
   const models = getModelsForBrand(form.vehicle_brand);
+  const typeLabel = (value) => t(`vehicle.types.${value}`, { defaultValue: value });
 
   const handleSave = async () => {
     const vehicleNo = form.vehicle_no.trim().toUpperCase();
-    if (!vehicleNo) { setError('Vehicle number is required'); return; }
+    if (!vehicleNo) { setError(t('estimate.vehicleRequired')); return; }
 
     setSaving(true);
     setError('');
@@ -112,7 +114,7 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
       onSave(mapVehicle(data));
     } catch (err) {
       console.error('AddVehicle error:', err);
-      setError(err.message || 'Something went wrong');
+      setError(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -129,7 +131,7 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 -mx-6 mb-5 flex items-center justify-between bg-white px-6 pb-3 pt-1">
-          <h2 className="text-lg font-bold text-brand-dark">Add Vehicle</h2>
+          <h2 className="text-lg font-bold text-brand-dark">{t('customerProfile.addVehicle')}</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
@@ -137,11 +139,11 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           {/* Vehicle Number */}
           <div>
             <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Registration Number *
+              {t('vehicle.number')} *
             </label>
             <input
               className="input-field uppercase"
-              placeholder="TS09AB1234"
+              placeholder={t('vehicle.numberPlaceholder')}
               value={form.vehicle_no}
               onChange={setField('vehicle_no')}
             />
@@ -150,12 +152,12 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           {/* Type */}
           <div>
             <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Vehicle Type
+              {t('vehicle.type')}
             </label>
             <select className="input-field" value={form.vehicle_type} onChange={handleTypeChange}>
               {VEHICLE_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
-                  {VEHICLE_TYPE_EMOJIS[t.value]} {t.label}
+                  {VEHICLE_TYPE_EMOJIS[t.value]} {typeLabel(t.value)}
                 </option>
               ))}
             </select>
@@ -164,21 +166,21 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           {/* Brand */}
           <div>
             <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Brand
+              {t('vehicle.brand')}
             </label>
             {brands.length > 0 ? (
               <select className="input-field" value={form.vehicle_brand} onChange={handleBrandChange}>
-                <option value="">Select brand</option>
+                <option value="">{t('vehicle.selectBrand')}</option>
                 {brands.map((b) => <option key={b} value={b}>{b}</option>)}
-                <option value="__other__">Other (type below)</option>
+                <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
               </select>
             ) : (
-              <input className="input-field" placeholder="Brand (e.g. Honda)"
+              <input className="input-field" placeholder={t('vehicle.brandPlaceholder')}
                 value={form.vehicle_brand} onChange={setField('vehicle_brand')} />
             )}
             {/* Free-type fallback when "Other" selected */}
             {form.vehicle_brand === '__other__' && (
-              <input className="input-field mt-2" placeholder="Enter brand name"
+              <input className="input-field mt-2" placeholder={t('vehicle.enterBrand')}
                 onChange={(e) => setForm((f) => ({ ...f, vehicle_brand: e.target.value, vehicle_model: '' }))} />
             )}
           </div>
@@ -186,21 +188,21 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           {/* Model */}
           <div>
             <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-              Model
+              {t('vehicle.model')}
             </label>
             {models.length > 0 && form.vehicle_brand !== '__other__' ? (
               <select className="input-field" value={form.vehicle_model} onChange={setField('vehicle_model')}>
-                <option value="">Select model</option>
+                <option value="">{t('vehicle.selectModel')}</option>
                 {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                <option value="__other__">Other (type below)</option>
+                <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
               </select>
             ) : (
-              <input className="input-field" placeholder="Model (e.g. Activa 6G)"
+              <input className="input-field" placeholder={t('vehicle.modelPlaceholder')}
                 value={form.vehicle_model === '__other__' ? '' : form.vehicle_model}
                 onChange={setField('vehicle_model')} />
             )}
             {form.vehicle_model === '__other__' && (
-              <input className="input-field mt-2" placeholder="Enter model name"
+              <input className="input-field mt-2" placeholder={t('vehicle.enterModel')}
                 onChange={(e) => setForm((f) => ({ ...f, vehicle_model: e.target.value }))} />
             )}
           </div>
@@ -209,7 +211,7 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-                Year
+                {t('vehicle.year')}
               </label>
               <input
                 className="input-field"
@@ -224,11 +226,11 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
             </div>
             <div className="flex-1">
               <label className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-1 block">
-                Color
+                {t('vehicle.color')}
               </label>
               <input
                 className="input-field"
-                placeholder="Black, Red…"
+                placeholder={t('vehicle.colorPlaceholder')}
                 value={form.color}
                 onChange={setField('color')}
               />
@@ -243,7 +245,7 @@ function AddVehicleModal({ shopId, customerId, onSave, onClose }) {
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? 'Saving…' : 'Add Vehicle'}
+          {saving ? t('settings.saving') : t('customerProfile.addVehicle')}
         </button>
       </div>
     </div>

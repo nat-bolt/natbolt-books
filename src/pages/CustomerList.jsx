@@ -17,21 +17,21 @@ function UpgradeWall({ onUpgrade }) {
         <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Lock className="w-10 h-10 text-amber-600" />
         </div>
-        <h2 className="text-xl font-bold text-brand-dark mb-2">Customer Management is a Paid Feature</h2>
+        <h2 className="text-xl font-bold text-brand-dark mb-2">{t('customer.paidFeatureTitle')}</h2>
         <p className="text-gray-500 text-sm mb-8 max-w-xs">
-          Upgrade to access your full customer directory, manage customer details, and unlock unlimited billing.
+          {t('customer.paidFeatureBody')}
         </p>
         <div className="space-y-3 w-full max-w-sm">
           <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-            Save 38% • Limited Time Offer
+            {t('estimate.paidFeatureOffer')}
           </div>
           <button className="btn-primary flex items-center gap-2 px-6 py-3 w-full justify-center" onClick={onUpgrade}>
             <Crown className="w-5 h-5" />
-            <span>Unlock unlimited billing — <span className="line-through opacity-60">₹799</span> ₹499/month</span>
+            <span>{t('dashboard.upgradeFeatureCta')}</span>
           </button>
         </div>
         <p className="text-xs text-gray-400 mt-6">
-          Note: You can still search and add customers when creating bills.
+          {t('customer.paidFeatureNote')}
         </p>
       </div>
     </Layout>
@@ -41,6 +41,7 @@ function UpgradeWall({ onUpgrade }) {
 // ── Add Customer Modal ────────────────────────────────────────────────────────
 // Collects: name, phone (required) + optional first vehicle details
 function AddCustomerModal({ shop, onSaved, onClose }) {
+  const { t } = useTranslation();
   const [name,  setName]  = useState('');
   const [phone, setPhone] = useState('');
 
@@ -71,11 +72,12 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
 
   // Normalise a "brand" value that might be '__other__'
   const resolvedBrand = vBrand === '__other__' ? '' : vBrand;
+  const typeLabel = (value) => t(`vehicle.types.${value}`, { defaultValue: value });
 
   const handleSave = async () => {
-    if (!name.trim())  { setError('Customer name is required');         return; }
-    if (!phone.trim()) { setError('Mobile number is required');         return; }
-    if (phone.length !== 10) { setError('Enter a valid 10-digit number'); return; }
+    if (!name.trim())  { setError(t('customer.nameRequired')); return; }
+    if (!phone.trim()) { setError(t('common.required')); return; }
+    if (phone.length !== 10) { setError(t('customer.invalidPhone')); return; }
 
     setSaving(true);
     setError('');
@@ -131,9 +133,9 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
       console.error('AddCustomer error:', err);
       // Duplicate phone: Supabase will throw a unique-violation
       if (err.code === '23505') {
-        setError('A customer with this phone number already exists');
+        setError(t('customer.duplicatePhone'));
       } else {
-        setError(err.message || 'Something went wrong');
+        setError(err.message || t('common.error'));
       }
     } finally {
       setSaving(false);
@@ -152,32 +154,32 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 -mx-5 mb-5 flex items-center justify-between bg-white px-5 pb-3 pt-1">
-          <h2 className="text-lg font-bold text-brand-dark">Add Customer</h2>
+          <h2 className="text-lg font-bold text-brand-dark">{t('customer.addCustomer')}</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
         {/* ── Customer details ───────────────────────────────────────────── */}
         <p className="text-xs font-bold text-brand-mid uppercase tracking-wide mb-3">
-          Customer & Vehicle Details
+          {t('customer.detailsSection')}
         </p>
         <div className="space-y-3">
           <div>
-            <label className="section-label">Mobile Number *</label>
+            <label className="section-label">{t('customer.phone')} *</label>
             <input
               className="input-field"
               type="tel"
               inputMode="numeric"
-              placeholder="9876543210"
+              placeholder={t('customer.phonePlaceholder')}
               maxLength={10}
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
             />
           </div>
           <div>
-            <label className="section-label">Full Name *</label>
+            <label className="section-label">{t('customer.name')} *</label>
             <input
               className="input-field"
-              placeholder="Customer name"
+              placeholder={t('customer.namePlaceholder')}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -190,10 +192,10 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
           <div className="space-y-3">
             {/* Vehicle Number */}
             <div>
-              <label className="section-label">Registration Number</label>
+              <label className="section-label">{t('vehicle.number')}</label>
               <input
                 className="input-field uppercase"
-                placeholder="TS09AB1234"
+                placeholder={t('vehicle.numberPlaceholder')}
                 value={vNo}
                 onChange={(e) => setVNo(e.target.value)}
               />
@@ -201,53 +203,53 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
 
             {/* Type */}
             <div>
-              <label className="section-label">Vehicle Type</label>
+              <label className="section-label">{t('vehicle.type')}</label>
               <select className="input-field" value={vType} onChange={handleTypeChange}>
                 {VEHICLE_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                  <option key={t.value} value={t.value}>{typeLabel(t.value)}</option>
                 ))}
               </select>
             </div>
 
             {/* Brand */}
             <div>
-              <label className="section-label">Brand</label>
+              <label className="section-label">{t('vehicle.brand')}</label>
               {brands.length > 0 ? (
                 <>
                   <select className="input-field" value={vBrand} onChange={handleBrandChange}>
-                    <option value="">Select brand</option>
+                    <option value="">{t('vehicle.selectBrand')}</option>
                     {brands.map((b) => <option key={b} value={b}>{b}</option>)}
-                    <option value="__other__">Other (type below)</option>
+                    <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
                   </select>
                   {vBrand === '__other__' && (
-                    <input className="input-field mt-2" placeholder="Enter brand name"
+                    <input className="input-field mt-2" placeholder={t('vehicle.enterBrand')}
                       onChange={(e) => setVBrand(e.target.value)} />
                   )}
                 </>
               ) : (
-                <input className="input-field" placeholder="Brand (e.g. Honda)"
+                <input className="input-field" placeholder={t('vehicle.brandPlaceholder')}
                   value={vBrand} onChange={(e) => setVBrand(e.target.value)} />
               )}
             </div>
 
             {/* Model */}
             <div>
-              <label className="section-label">Model</label>
+              <label className="section-label">{t('vehicle.model')}</label>
               {models.length > 0 && vBrand !== '__other__' ? (
                 <>
                   <select className="input-field" value={vModel}
                     onChange={(e) => setVModel(e.target.value)}>
-                    <option value="">Select model</option>
+                    <option value="">{t('vehicle.selectModel')}</option>
                     {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                    <option value="__other__">Other (type below)</option>
+                    <option value="__other__">{t('vehicle.otherTypeBelow')}</option>
                   </select>
                   {vModel === '__other__' && (
-                    <input className="input-field mt-2" placeholder="Enter model name"
+                    <input className="input-field mt-2" placeholder={t('vehicle.enterModel')}
                       onChange={(e) => setVModel(e.target.value)} />
                   )}
                 </>
               ) : (
-                <input className="input-field" placeholder="Model (e.g. Activa 6G)"
+                <input className="input-field" placeholder={t('vehicle.modelPlaceholder')}
                   value={vModel === '__other__' ? '' : vModel}
                   onChange={(e) => setVModel(e.target.value)} />
               )}
@@ -262,7 +264,7 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? 'Saving…' : 'Save Customer'}
+          {saving ? t('settings.saving') : t('customer.saveCustomer')}
         </button>
       </div>
     </div>

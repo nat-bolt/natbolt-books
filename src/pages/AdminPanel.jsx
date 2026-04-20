@@ -19,6 +19,7 @@ import { UNIQUE_CITIES } from '../data/cities';
 import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../utils/shopAddress';
 
 const FREE_LIMIT = FREE_BILL_LIMIT;
+const ADMIN_SHOPS_CACHE_PREFIX = 'nb_admin_shops_v1';
 
 function SetupStepChip({ active, complete, label }) {
   const stateClass = active
@@ -870,6 +871,7 @@ function NetworkAnalytics() {
 export default function AdminPanel() {
   const navigate = useNavigate();
   const { user, isAdmin, authLoading, setUser, setShop, setIsAdmin } = useStore();
+  const adminCacheKey = `${ADMIN_SHOPS_CACHE_PREFIX}:${user?.uid || 'anon'}`;
 
   const [shops, setShops] = useState([]);
   const [deactivatedShops, setDeactivatedShops] = useState([]);
@@ -884,8 +886,23 @@ export default function AdminPanel() {
   useEffect(() => {
     if (authLoading) return;
     if (!isAdmin) return;
-    loadShops();
-  }, [authLoading, isAdmin]);
+    let hasCachedSnapshot = false;
+
+    try {
+      const raw = localStorage.getItem(adminCacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (Array.isArray(cached?.active)) setShops(cached.active);
+        if (Array.isArray(cached?.deactivated)) setDeactivatedShops(cached.deactivated);
+        setLoading(false);
+        hasCachedSnapshot = true;
+      }
+    } catch {
+      // Ignore cache parse errors; the fresh fetch below will replace them.
+    }
+
+    loadShops(hasCachedSnapshot);
+  }, [adminCacheKey, authLoading, isAdmin]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -893,8 +910,10 @@ export default function AdminPanel() {
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
-  const loadShops = async () => {
-    setLoading(true);
+  const loadShops = async (backgroundRefresh = false) => {
+    if (!backgroundRefresh) {
+      setLoading(true);
+    }
     try {
       // Load all shops first (works whether deleted_at column exists or not)
       const { data: allShops, error } = await supabase
@@ -913,10 +932,16 @@ export default function AdminPanel() {
 
       setShops(active);
       setDeactivatedShops(deactivated);
+      localStorage.setItem(adminCacheKey, JSON.stringify({
+        active,
+        deactivated,
+      }));
     } catch (err) {
       console.error('loadShops error:', err);
     } finally {
-      setLoading(false);
+      if (!backgroundRefresh) {
+        setLoading(false);
+      }
     }
   };
 

@@ -1179,6 +1179,33 @@ export default function NewEstimate() {
     return <UpgradeWall onUpgrade={() => navigate('/settings')} />;
   }
 
+  if (!draftReady) {
+    return (
+      <Layout title={isBill ? t('estimate.billTitle') : t('estimate.newTitle')} showBack showNav={false}>
+        <div className="space-y-5 p-4 pb-36 animate-pulse">
+          <div className="flex gap-1.5 rounded-2xl bg-gray-100 p-1.5">
+            <div className="h-11 flex-1 rounded-xl bg-white" />
+            <div className="h-11 flex-1 rounded-xl bg-gray-200" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[0, 1, 2].map((idx) => (
+              <div key={idx} className="h-12 rounded-2xl bg-white" />
+            ))}
+          </div>
+          <div className="card space-y-4">
+            <div className="h-4 w-32 rounded-full bg-gray-100" />
+            <div className="h-12 rounded-xl bg-gray-100" />
+          </div>
+          <div className="card space-y-4">
+            <div className="h-4 w-28 rounded-full bg-gray-100" />
+            <div className="h-20 rounded-xl bg-gray-100" />
+            <div className="h-12 rounded-xl bg-gray-100" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout title={isBill ? t('estimate.billTitle') : t('estimate.newTitle')} showBack showNav={false}>
       <div className="space-y-5 p-4 pb-36">

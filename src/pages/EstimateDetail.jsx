@@ -10,6 +10,7 @@ import DocumentEditPanel from '../components/DocumentEditPanel';
 import DocumentItemsCard from '../components/DocumentItemsCard';
 import DocumentPreviewLayer from '../components/DocumentPreviewLayer';
 import DocumentTotalsCard from '../components/DocumentTotalsCard';
+import InlineNotice from '../components/InlineNotice';
 import StatusBadge from '../components/StatusBadge';
 import StickyActionBar from '../components/StickyActionBar';
 import WhatsAppIcon from '../components/WhatsAppIcon';
@@ -37,6 +38,7 @@ export default function EstimateDetail() {
   const [catalogue, setCatalogue]   = useState([]);
   const [showCat, setShowCat]       = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [feedback, setFeedback] = useState(null);
   const [editJobPhotoFile, setEditJobPhotoFile] = useState(null);
   const [editJobPhotoPreview, setEditJobPhotoPreview] = useState('');
   const [editJobPhotoRemoved, setEditJobPhotoRemoved] = useState(false);
@@ -283,7 +285,11 @@ export default function EstimateDetail() {
       `Thank you! 🙏\n\nPowered by NatBolt Billu`;
 
     if (!phone) {
-      alert('Customer phone number is missing.');
+      setFeedback({
+        tone: 'warning',
+        title: t('bill.phoneMissingTitle'),
+        body: t('bill.phoneMissingBody'),
+      });
       return;
     }
 
@@ -343,8 +349,56 @@ export default function EstimateDetail() {
 
   if (loading) return (
     <Layout showBack title={t('estimate.viewTitle')}>
-      <div className="flex justify-center py-16">
-        <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
+      <div className="p-4 space-y-4 pb-36 animate-pulse">
+        <div className="h-12 rounded-xl bg-green-100/70" />
+        <div className="card">
+          <div className="mb-4 flex items-start justify-between">
+            <div className="space-y-2">
+              <div className="h-5 w-36 rounded-full bg-gray-200" />
+              <div className="h-3 w-20 rounded-full bg-gray-100" />
+            </div>
+            <div className="h-8 w-24 rounded-full bg-gray-100" />
+          </div>
+          <div className="space-y-3 border-t border-gray-100 pt-3">
+            {[0, 1, 2, 3].map((idx) => (
+              <div key={idx} className="flex items-center justify-between gap-3">
+                <div className="h-3 w-20 rounded-full bg-gray-100" />
+                <div className="h-3 w-28 rounded-full bg-gray-200" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="mb-3 h-4 w-24 rounded-full bg-gray-100" />
+          <div className="h-56 rounded-xl bg-gray-100" />
+        </div>
+        <div className="card space-y-3">
+          <div className="h-4 w-28 rounded-full bg-gray-100" />
+          {[0, 1, 2].map((idx) => (
+            <div key={idx} className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-brand-light" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3 w-32 rounded-full bg-gray-200" />
+                <div className="h-3 w-20 rounded-full bg-gray-100" />
+              </div>
+              <div className="h-3 w-16 rounded-full bg-gray-200" />
+            </div>
+          ))}
+        </div>
+        <div className="card space-y-3">
+          {[0, 1, 2].map((idx) => (
+            <div key={idx} className="flex items-center justify-between gap-3">
+              <div className="h-3 w-24 rounded-full bg-gray-100" />
+              <div className="h-3 w-16 rounded-full bg-gray-200" />
+            </div>
+          ))}
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-4 w-28 rounded-full bg-gray-200" />
+              <div className="h-4 w-20 rounded-full bg-gray-200" />
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );
@@ -396,6 +450,11 @@ export default function EstimateDetail() {
       />
 
       <div className="p-4 space-y-4 pb-36">
+        {feedback ? (
+          <InlineNotice tone={feedback.tone} title={feedback.title} compact>
+            {feedback.body}
+          </InlineNotice>
+        ) : null}
 
         {isConverted && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-green-700">
@@ -513,22 +572,22 @@ export default function EstimateDetail() {
               photoPreparingLabel={t('estimate.photoPreparing')}
               replacePhotoLabel={t('settings.replacePhoto')}
               removePhotoLabel={t('settings.removePhoto')}
-              labourLabel="Labour Charges (₹)"
+              labourLabel={t('estimate.labourWithCurrency')}
               labourValue={editLabour}
               onLabourChange={(e) => setEditLabour(e.target.value)}
               onLabourKeyDown={handleEnterDismissKeyboard}
-              gstLabel="GST Bill (18%)"
+              gstLabel={t('estimate.gstBillLabel')}
               isGST={editIsGST}
               onToggleGST={() => setEditIsGST((g) => !g)}
               totalRows={editTotalRows}
-              grandTotalLabel="Grand Total"
+              grandTotalLabel={t('estimate.grandTotal')}
               grandTotalValue={fmtCurrency(editGrandTotal)}
               onCancel={() => setEditMode(false)}
               onSave={handleSaveEdit}
               saving={savingEdit}
               cancelLabel={t('common.cancel')}
-              saveLabel="Save Changes"
-              savingLabel="Saving…"
+              saveLabel={t('catalogue.saveChanges')}
+              savingLabel={t('estimate.savingChanges')}
             />
           </>
         )}
@@ -552,8 +611,12 @@ export default function EstimateDetail() {
               onClick={handlePreviewPDF}
               disabled={pdfLoading}
             >
-              <Eye className="w-4 h-4" />
-              {pdfLoading ? '…' : t('bill.viewPdf')}
+              {pdfLoading ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-mid border-t-transparent" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+              <span>{t('bill.viewPdf')}</span>
             </button>
             <button
               className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1fa855] px-4 text-sm font-semibold text-white active:scale-95 transition-all disabled:opacity-60"
@@ -561,7 +624,7 @@ export default function EstimateDetail() {
               disabled={pdfLoading}
             >
               <WhatsAppIcon className="w-5 h-5" badge badgeClassName="p-1" />
-              {pdfLoading ? '…' : 'WhatsApp'}
+              <span>{t('common.whatsApp')}</span>
             </button>
           </div>
           <button

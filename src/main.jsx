@@ -3,17 +3,17 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
-
 const setAppHeight = () => {
   document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`)
 }
 
 setAppHeight()
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
 window.addEventListener('resize', setAppHeight)
 window.visualViewport?.addEventListener('resize', setAppHeight)
 
