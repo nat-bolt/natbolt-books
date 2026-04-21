@@ -7,7 +7,7 @@ import { SpeedInsights, computeRoute } from '@vercel/speed-insights/react';
 import { auth } from './firebase';
 import { supabase, mapShop } from './supabase';
 import './i18n/index';
-import useStore from './store/useStore';
+import useStore, { USER_CONTEXT_CACHE_KEY, readCachedUserContextSnapshot } from './store/useStore';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -38,25 +38,16 @@ const SPEED_INSIGHTS_ROUTES = [
   '/settings',
 ];
 
-const USER_CONTEXT_CACHE_KEY = 'nb_user_context_v1';
-
 function readCachedUserContext(firebaseUser) {
   if (!firebaseUser?.uid) return null;
 
-  try {
-    const raw = localStorage.getItem(USER_CONTEXT_CACHE_KEY);
-    if (!raw) return null;
+  const parsed = readCachedUserContextSnapshot();
+  if (parsed?.uid !== firebaseUser.uid) return null;
 
-    const parsed = JSON.parse(raw);
-    if (parsed?.uid !== firebaseUser.uid) return null;
-
-    return {
-      isAdmin: Boolean(parsed.isAdmin),
-      shop: parsed.shop || null,
-    };
-  } catch {
-    return null;
-  }
+  return {
+    isAdmin: Boolean(parsed.isAdmin),
+    shop: parsed.shop || null,
+  };
 }
 
 function writeCachedUserContext(firebaseUser, { isAdmin, shop }) {
@@ -64,6 +55,7 @@ function writeCachedUserContext(firebaseUser, { isAdmin, shop }) {
 
   localStorage.setItem(USER_CONTEXT_CACHE_KEY, JSON.stringify({
     uid: firebaseUser.uid,
+    phoneNumber: firebaseUser.phoneNumber || null,
     isAdmin: Boolean(isAdmin),
     shop: shop || null,
   }));
@@ -110,14 +102,19 @@ export default function App() {
       if (firebaseUser) {
         if (!isMounted) return;
         setUser(firebaseUser);
-        setShop(null);
-        setIsAdmin(false);
 
         const cachedContext = readCachedUserContext(firebaseUser);
         if (cachedContext) {
           setIsAdmin(cachedContext.isAdmin);
           setShop(cachedContext.shop);
           setAuthLoading(false);
+        } else {
+          const state = useStore.getState();
+          if (state.user?.uid !== firebaseUser.uid || state.user?.__cached) {
+            setShop(null);
+            setIsAdmin(false);
+          }
+          setAuthLoading(true);
         }
 
         try {
@@ -156,7 +153,7 @@ export default function App() {
             console.error('Auth init error:', err);
           }
         }
-        if (isMounted && !cachedContext) {
+        if (isMounted) {
           setAuthLoading(false);
         }
       } else {

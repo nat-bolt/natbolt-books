@@ -71,8 +71,8 @@ function createEmptyVehicle() {
   return { ...EMPTY_VEHICLE };
 }
 
-function getDraftStorageKey(shopId, docMode) {
-  return `nb_new_document_draft:${shopId}:${docMode}`;
+function getDraftStorageKey(shopId, docMode, sourceEstimateId = '') {
+  return `nb_new_document_draft:${shopId}:${docMode}:${sourceEstimateId || 'default'}`;
 }
 
 function inferMimeTypeFromDataUrl(dataUrl) {
@@ -94,6 +94,7 @@ function hasDraftProgress({
   vehicle,
   odoReading,
   jobPhotoPreview,
+  notes,
   parts,
   labour,
   isGST,
@@ -108,6 +109,7 @@ function hasDraftProgress({
     vehicle.model ||
     odoReading ||
     jobPhotoPreview ||
+    notes ||
     parts.length > 0 ||
     labour ||
     isGST ||
@@ -599,6 +601,8 @@ export default function NewEstimate() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { shop, language } = useStore();
+  const sourceEstimateId = searchParams.get('fromEstimate') || '';
+  const sourcePrefillAppliedRef = useRef(false);
 
   // Document mode — initialised from ?mode=bill URL param (set by Dashboard "New Bill" button)
   // Toggle inside the form still lets the user switch after opening.
@@ -626,6 +630,7 @@ export default function NewEstimate() {
   const [jobPhotoPreview, setJobPhotoPreview] = useState(''); // base64 preview
   const [photoPreparing, setPhotoPreparing] = useState(false);
   const [odoReading, setOdoReading] = useState('');
+  const [notes, setNotes] = useState('');
 
   // Parts & totals
   const [parts, setParts]     = useState([]);
@@ -643,18 +648,25 @@ export default function NewEstimate() {
   const [step, setStep] = useState(0);
   const [draftNotice, setDraftNotice] = useState('');
   const [draftReady, setDraftReady] = useState(false);
+  const isBill = docMode === 'bill';
+  const steps = isBill
+    ? [
+        t('estimate.stepDetails'),
+        t('estimate.stepItems'),
+        t('estimate.stepTotals'),
+      ]
+    : [
+        t('estimate.stepDetails'),
+        t('estimate.stepJob'),
+        t('estimate.stepApprox'),
+      ];
 
   // Computed totals
   const partsSubtotal = parts.reduce((s, p) => s + (p.total || 0), 0);
   const cgst          = isGST ? partsSubtotal * 0.09 : 0;
   const sgst          = isGST ? partsSubtotal * 0.09 : 0;
   const grandTotal    = partsSubtotal + (parseFloat(labour) || 0) + cgst + sgst;
-  const steps = [
-    t('estimate.stepDetails'),
-    t('estimate.stepItems'),
-    t('estimate.stepTotals'),
-  ];
-  const draftKey = shop?.id ? getDraftStorageKey(shop.id, docMode) : '';
+  const draftKey = shop?.id ? getDraftStorageKey(shop.id, docMode, sourceEstimateId) : '';
   const hasCurrentDraftProgress = hasDraftProgress({
     customer,
     customerVehicles,
@@ -662,6 +674,7 @@ export default function NewEstimate() {
     vehicle,
     odoReading,
     jobPhotoPreview,
+    notes,
     parts,
     labour,
     isGST,
@@ -678,6 +691,7 @@ export default function NewEstimate() {
     setJobPhotoPreview('');
     setPhotoPreparing(false);
     setOdoReading('');
+    setNotes('');
     setParts([]);
     setLabour('');
     setIsGST(false);
@@ -706,6 +720,79 @@ export default function NewEstimate() {
       })
       .catch(console.error);
   }, [shop]);
+
+  useEffect(() => {
+    if (!shop?.id || docMode !== 'bill' || !sourceEstimateId || !draftReady || sourcePrefillAppliedRef.current || hasCurrentDraftProgress) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const prefillFromJobCard = async () => {
+      try {
+        const { data: sourceJobCard, error: sourceErr } = await supabase
+          .from('bills')
+          .select('*')
+          .eq('id', sourceEstimateId)
+          .eq('shop_id', shop.id)
+          .eq('type', 'estimate')
+          .maybeSingle();
+
+        if (sourceErr || !sourceJobCard || cancelled) return;
+
+        const { data: customerRow } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', sourceJobCard.customer_id)
+          .maybeSingle();
+
+        const { data: vehicleRows } = await supabase
+          .from('vehicles')
+          .select('*')
+          .eq('customer_id', sourceJobCard.customer_id)
+          .eq('shop_id', shop.id)
+          .order('created_at', { ascending: true });
+
+        if (cancelled) return;
+
+        const mappedVehicles = (vehicleRows || []).map(mapVehicle);
+        const mappedCustomer = customerRow ? mapCustomer(customerRow) : null;
+        const preferredVehicleId =
+          sourceJobCard.vehicle_id ||
+          mappedVehicles.find((v) => v.vehicleNo === sourceJobCard.vehicle_no)?.id ||
+          null;
+
+        if (mappedCustomer) setCustomer(mappedCustomer);
+        setCustomerVehicles(mappedVehicles);
+        setSelectedVehicleId(preferredVehicleId || (mappedVehicles[0]?.id || NEW_VEHICLE_ID));
+        setVehicle({
+          number: sourceJobCard.vehicle_no || '',
+          type: sourceJobCard.vehicle_type || 'scooter',
+          brand: sourceJobCard.vehicle_brand || '',
+          model: sourceJobCard.vehicle_model || '',
+        });
+        setOdoReading(sourceJobCard.odo_reading != null ? String(sourceJobCard.odo_reading) : '');
+        setJobPhoto(null);
+        setJobPhotoPreview(sourceJobCard.job_photo_url || '');
+        if (photoInputRef.current) photoInputRef.current.value = '';
+        setNotes(sourceJobCard.notes || '');
+        setParts([]);
+        setLabour('');
+        setIsGST(false);
+        setStep(1);
+        setError('');
+        sourcePrefillAppliedRef.current = true;
+      } catch (prefillErr) {
+        console.error('Job card prefill failed:', prefillErr);
+      }
+    };
+
+    prefillFromJobCard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shop?.id, docMode, sourceEstimateId, draftReady, hasCurrentDraftProgress]);
 
   useEffect(() => {
     if (!draftKey) return;
@@ -764,6 +851,7 @@ export default function NewEstimate() {
         setSelectedVehicleId(nextSelectedVehicleId);
         setVehicle(nextVehicle);
         setOdoReading(parsedDraft.odoReading || '');
+        setNotes(parsedDraft.notes || '');
         setParts(nextParts);
         setLabour(parsedDraft.labour || '');
         setIsGST(Boolean(parsedDraft.isGST));
@@ -778,6 +866,7 @@ export default function NewEstimate() {
           vehicle: nextVehicle,
           odoReading: parsedDraft.odoReading || '',
           jobPhotoPreview: nextPhotoPreview,
+          notes: parsedDraft.notes || '',
           parts: nextParts,
           labour: parsedDraft.labour || '',
           isGST: Boolean(parsedDraft.isGST),
@@ -826,6 +915,7 @@ export default function NewEstimate() {
           jobPhotoDataUrl: jobPhotoPreview || '',
           jobPhotoName: jobPhoto?.name || 'job-photo.jpg',
           jobPhotoType: jobPhoto?.type || inferMimeTypeFromDataUrl(jobPhotoPreview),
+          notes,
           parts,
           labour,
           isGST,
@@ -852,6 +942,7 @@ export default function NewEstimate() {
     odoReading,
     jobPhotoPreview,
     jobPhoto,
+    notes,
     parts,
     labour,
     isGST,
@@ -991,7 +1082,7 @@ export default function NewEstimate() {
   // ── Save (estimate OR direct bill) ───────────────────────────────────────
   const handleSave = async () => {
     if (!customer)          { setError(t('estimate.selectCustomerError')); return; }
-    if (parts.length === 0) { setError(t('estimate.addItemError')); return; }
+    if (isBill && parts.length === 0) { setError(t('estimate.addItemError')); return; }
     if (IS_NEW && !vehicle.number.trim()) { setError(t('estimate.vehicleRequired')); return; }
     if (!IS_NEW && !customerVehicles.some((v) => v.id === selectedVehicleId)) {
       setError(t('estimate.selectVehicleError'));
@@ -1044,6 +1135,7 @@ export default function NewEstimate() {
       if (rpcErr) throw rpcErr;
 
       // Build insert payload — number field differs by mode
+      const approxTotal = parseFloat(labour) || 0;
       const payload = {
         shop_id:        shop.id,
         customer_id:    customer.id,
@@ -1051,19 +1143,24 @@ export default function NewEstimate() {
         status:         docMode === 'bill' ? 'unpaid' : 'draft',
         customer_name:  customer.name,
         customer_phone: customer.phone,
+        notes:          notes.trim() || null,
         vehicle_no:     vehicleNo,
         vehicle_type:   vehicleType,
         vehicle_brand:  vehicleBrand,
         vehicle_model:  vehicleModel,
         odo_reading:    odoReading.trim() ? Number.parseInt(odoReading.trim(), 10) : null,
         vehicle_id:     vehicleId,
-        items:          parts,
-        parts_subtotal: partsSubtotal,
-        labour_charge:  parseFloat(labour) || 0,
-        is_gst:         isGST,
-        cgst,
-        sgst,
-        grand_total:    grandTotal,
+        items:          isBill ? parts : [],
+        parts_subtotal: isBill ? partsSubtotal : 0,
+        labour_charge:  isBill ? (parseFloat(labour) || 0) : approxTotal,
+        is_gst:         isBill ? isGST : false,
+        cgst:           isBill ? cgst : 0,
+        sgst:           isBill ? sgst : 0,
+        grand_total:    isBill ? grandTotal : approxTotal,
+        paid_amount:    0,
+        balance_due:    isBill ? grandTotal : approxTotal,
+        converted_from_estimate: isBill && sourceEstimateId ? sourceEstimateId : null,
+        job_photo_url: (!jobPhoto && jobPhotoPreview && !jobPhotoPreview.startsWith('data:')) ? jobPhotoPreview : null,
         // Number field: estimate_number for estimates, bill_number for bills
         ...(docMode === 'bill'
           ? { bill_number:     docNumber }
@@ -1105,6 +1202,15 @@ export default function NewEstimate() {
         }
       }
 
+      if (docMode === 'bill' && sourceEstimateId) {
+        await supabase
+          .from('bills')
+          .update({ status: 'converted' })
+          .eq('id', sourceEstimateId)
+          .eq('shop_id', shop.id)
+          .eq('type', 'estimate');
+      }
+
       // Navigate to the right detail page
       clearCurrentDraft(false);
       navigate(docMode === 'bill' ? `/bill/${newBill.id}` : `/estimate/${newBill.id}`);
@@ -1118,8 +1224,6 @@ export default function NewEstimate() {
 
   // ── Derived: currently selected vehicle (for display) ─────────────────────
   const activeVehicle = customerVehicles.find((v) => v.id === selectedVehicleId);
-
-  const isBill = docMode === 'bill';
 
   const validateStep = (targetStep = step) => {
     if (targetStep === 0) {
@@ -1145,7 +1249,7 @@ export default function NewEstimate() {
       }
     }
 
-    if (targetStep === 1 && parts.length === 0) {
+    if (isBill && targetStep === 1 && parts.length === 0) {
       setError(t('estimate.addItemError'));
       return false;
     }
@@ -1214,7 +1318,12 @@ export default function NewEstimate() {
             className={`flex-1 rounded-xl py-3 text-sm font-bold transition-all ${
               !isBill ? 'bg-white text-brand-dark shadow-sm' : 'text-gray-400'
             }`}
-            onClick={() => setDocMode('estimate')}
+            onClick={() => {
+              setDocMode('estimate');
+              setParts([]);
+              setIsGST(false);
+              setError('');
+            }}
             type="button"
           >
             {t('estimate.docEstimate')}
@@ -1223,7 +1332,10 @@ export default function NewEstimate() {
             className={`flex-1 rounded-xl py-3 text-sm font-bold transition-all ${
               isBill ? 'bg-white text-brand-dark shadow-sm' : 'text-gray-400'
             }`}
-            onClick={() => setDocMode('bill')}
+            onClick={() => {
+              setDocMode('bill');
+              setError('');
+            }}
             type="button"
           >
             {t('estimate.docBill')}
@@ -1441,7 +1553,7 @@ export default function NewEstimate() {
               </div>
             ) : null}
 
-            {customer && (selectedVehicleId || IS_NEW) ? (
+            {isBill && customer && (selectedVehicleId || IS_NEW) ? (
               <div className="card space-y-3">
                 <p className="section-label">
                   <Camera className="mr-1 inline h-4 w-4" />
@@ -1499,6 +1611,7 @@ export default function NewEstimate() {
         ) : null}
 
         {step === 1 ? (
+          isBill ? (
           <div className="space-y-4">
             <div className="card">
               <div className="mb-3 flex items-center justify-between">
@@ -1580,9 +1693,76 @@ export default function NewEstimate() {
               </div>
             </div>
           </div>
+          ) : (
+            <div className="card space-y-3">
+              <p className="section-label">
+                <Camera className="mr-1 inline h-4 w-4" />
+                {t('estimate.jobPhoto')}
+              </p>
+              <p className="-mt-2 text-xs text-gray-500">
+                {t('estimate.jobPhotoHint')}
+              </p>
+              {photoPreparing ? (
+                <div className="flex items-center gap-2 text-xs text-brand-mid">
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-mid border-t-transparent" />
+                  {t('estimate.photoPreparing')}
+                </div>
+              ) : null}
+
+              {jobPhotoPreview ? (
+                <div className="relative">
+                  <img
+                    src={jobPhotoPreview}
+                    alt="Job photo preview"
+                    className="h-56 w-full rounded-xl border-2 border-gray-200 object-cover"
+                  />
+                  <button
+                    className="absolute right-3 top-3 rounded-full bg-red-500 p-2 text-white shadow-lg"
+                    onClick={clearPhoto}
+                    type="button"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="flex w-full flex-col items-center gap-3 rounded-xl border-2 border-dashed border-gray-300 p-8 text-gray-500 transition-colors hover:border-brand-mid hover:text-brand-mid active:bg-gray-50"
+                  onClick={() => photoInputRef.current?.click()}
+                  type="button"
+                >
+                  <Camera className="h-12 w-12" />
+                  <div className="text-center">
+                    <span className="block text-sm font-medium">{t('estimate.photoTap')}</span>
+                    <span className="text-xs">{t('estimate.photoHelp')}</span>
+                  </div>
+                </button>
+              )}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+
+              <div>
+                <label className="section-label">{t('estimate.notes')}</label>
+                <p className="-mt-2 mb-2 text-xs text-gray-500">{t('estimate.notesHint')}</p>
+                <textarea
+                  className="input-field min-h-[112px] resize-none"
+                  placeholder={t('estimate.notesPlaceholder')}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  onKeyDown={dismissKeyboardOnEnter}
+                />
+              </div>
+            </div>
+          )
         ) : null}
 
         {step === 2 ? (
+          isBill ? (
           <div className="space-y-4">
             <div className="card space-y-4">
               <div>
@@ -1639,6 +1819,36 @@ export default function NewEstimate() {
               </div>
             </div>
           </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="card space-y-4">
+                <div>
+                  <label className="section-label">{t('estimate.approxTotal')}</label>
+                  <p className="-mt-2 mb-2 text-xs text-gray-500">{t('estimate.approxTotalHint')}</p>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-medium text-gray-500">₹</span>
+                    <input
+                      type="tel"
+                      inputMode="decimal"
+                      enterKeyHint="done"
+                      className="input-field pl-7"
+                      placeholder={t('estimate.approxTotalPlaceholder')}
+                      value={labour}
+                      onChange={(e) => setLabour(e.target.value)}
+                      onKeyDown={dismissKeyboardOnEnter}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="card space-y-2">
+                <div className="flex justify-between border-t-0 pt-0">
+                  <span className="font-bold text-brand-dark">{t('estimate.approxTotal')}</span>
+                  <span className="text-xl font-bold text-brand-dark">₹{(parseFloat(labour) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )
         ) : null}
 
         {error ? (
@@ -1685,12 +1895,12 @@ export default function NewEstimate() {
           >
             {loading ? t('estimate.saving') : step === 0 ? (
               <span className="inline-flex items-center gap-2">
-                {t('estimate.continueToItems')}
+                {isBill ? t('estimate.continueToItems') : t('estimate.continueToJob')}
                 <ArrowRight className="h-4 w-4" />
               </span>
             ) : step === 1 ? (
               <span className="inline-flex items-center gap-2">
-                {t('estimate.continueToTotals')}
+                {isBill ? t('estimate.continueToTotals') : t('estimate.continueToApprox')}
                 <ArrowRight className="h-4 w-4" />
               </span>
             ) : (
@@ -1706,7 +1916,7 @@ export default function NewEstimate() {
           onClose={() => setShowCustomerModal(false)}
         />
       )}
-      {showPartsModal && (
+      {isBill && showPartsModal && (
         <PartsModal
           catalogue={catalogue}
           onAdd={addPart}

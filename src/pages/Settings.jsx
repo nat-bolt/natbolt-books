@@ -65,12 +65,12 @@ export default function Settings() {
   const friendlyError = (err) => {
     const msg = err?.message || '';
     if (!navigator.onLine || msg.includes('Failed to fetch') || msg.includes('NetworkError'))
-      return "Couldn't save — check your connection and try again.";
+      return t('settings.errorConnection');
     if (msg.includes('duplicate') || msg.includes('unique'))
-      return 'This information is already registered.';
+      return t('settings.errorDuplicate');
     if (msg.includes('JWT') || msg.includes('session') || msg.includes('auth'))
-      return 'Your session expired. Please sign in again.';
-    return 'Something went wrong. Please try again.';
+      return t('settings.errorSession');
+    return t('common.error');
   };
 
   // ── Shop details save ─────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setQrError('QR code must be an image file (PNG/JPG)');
+      setQrError(t('setup.qrImageError'));
       return;
     }
     setQrFile(file);
@@ -197,6 +197,7 @@ export default function Settings() {
       setShop({ ...shop, qrCodeUrl: null });
     } catch (err) {
       console.error('QR remove error:', err);
+      setQrError(friendlyError(err));
     }
   };
 
@@ -205,7 +206,7 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setPhotoError('Shop photo must be an image file (PNG/JPG)');
+      setPhotoError(t('setup.photoImageError'));
       return;
     }
     setPhotoFile(file);
@@ -280,6 +281,7 @@ export default function Settings() {
       setShop({ ...shop, shopPhotoUrl: null });
     } catch (err) {
       console.error('Shop photo remove error:', err);
+      setPhotoError(friendlyError(err));
     }
   };
 
@@ -303,26 +305,26 @@ export default function Settings() {
 
   const confirmConfig = confirmDialog === 'removeQr'
     ? {
-        title: 'Remove payment QR?',
-        body: 'Your bill PDFs will show only the UPI ID text. You can re-upload anytime.',
-        confirmLabel: 'Remove QR',
-        cancelLabel: 'Keep QR',
+        title: t('settings.removeQrTitle'),
+        body: t('settings.removeQrBody'),
+        confirmLabel: t('settings.removeQrConfirm'),
+        cancelLabel: t('settings.keepQr'),
         onConfirm: doQrRemove,
       }
     : confirmDialog === 'removePhoto'
       ? {
-          title: 'Remove shop photo?',
-          body: "Your bill PDFs won't show a shop photo. You can re-upload anytime.",
-          confirmLabel: 'Remove photo',
-          cancelLabel: 'Keep photo',
+          title: t('settings.removePhotoTitle'),
+          body: t('settings.removePhotoBody'),
+          confirmLabel: t('settings.removePhotoConfirm'),
+          cancelLabel: t('settings.keepPhoto'),
           onConfirm: doPhotoRemove,
         }
       : confirmDialog === 'logout'
         ? {
-            title: 'Sign out?',
-            body: "You'll need to enter your phone number and OTP to sign back in.",
-            confirmLabel: 'Sign out',
-            cancelLabel: 'Stay signed in',
+            title: t('settings.logoutTitle'),
+            body: t('settings.logoutBody'),
+            confirmLabel: t('settings.logoutConfirmCta'),
+            cancelLabel: t('settings.logoutStay'),
             onConfirm: doLogout,
           }
         : null;
@@ -350,14 +352,14 @@ export default function Settings() {
             <div className="mt-3 space-y-2">
               <div className="flex justify-center">
                 <div className="inline-block bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                  Save 38% • Limited Time Offer
+                  {t('estimate.paidFeatureOffer')}
                 </div>
               </div>
               <button
                 className="w-full text-xs font-bold text-white bg-accent rounded-xl px-4 py-2.5 flex items-center justify-center gap-2"
                 onClick={() => window.open(`https://wa.me/919738007523?text=${encodeURIComponent('Hi, I want to unlock unlimited billing on NatBolt Billu. Shop: ' + shop?.shopName)}`, '_blank')}
               >
-                <span>Unlock at <span className="line-through opacity-70">₹799</span> ₹499/month</span>
+                <span>{t('dashboard.upgradeFeatureCta')}</span>
               </button>
             </div>
           )}

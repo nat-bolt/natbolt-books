@@ -40,12 +40,12 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang, previe
     bill.partsSubtotal ??
     items.reduce((sum, item) => sum + Number(item.total || 0), 0)
   );
-  const labourCharge = Number(bill.labourCharge || 0);
+  const labourCharge = Number(isEstimate ? (bill.grandTotal || bill.labourCharge || 0) : (bill.labourCharge || 0));
   const cgst = Number(bill.cgst || 0);
   const sgst = Number(bill.sgst || 0);
-  const grandTotal = Number(bill.grandTotal || partsSubtotal + labourCharge + cgst + sgst);
+  const grandTotal = Number(isEstimate ? labourCharge : (bill.grandTotal || partsSubtotal + labourCharge + cgst + sgst));
   const docLabel = isEstimate
-    ? `${t('pdf.estimate')} - ${t('pdf.notTaxInvoice')}`
+    ? t('pdf.jobCard')
     : bill.isGST ? t('pdf.taxInvoice') : t('pdf.serviceBill');
   const metaRows = [
     [isEstimate ? t('pdf.estimateNo') : t('pdf.billNo'), bill.billNumber || bill.estimateNumber || '-'],
@@ -163,92 +163,114 @@ export default function BillPreviewSheet({ bill, shop, customer, t, lang, previe
             </div>
           </div>
 
-          <div style={{ border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: TABLE_COLS_MM.map(mm).join(' '),
-                background: '#0b0b0b',
-                color: '#ffffff',
-                fontSize: pt(BODY_TEXT_PT),
-                fontWeight: 700,
-                padding: `${mm(2)} 0`,
-              }}
-            >
-              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.srNo')}</div>
-              <div style={{ paddingLeft: mm(2) }}>{t('pdf.description')}</div>
-              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.qty')}</div>
-              <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.rate')}</div>
-              <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{t('pdf.amount')}</div>
+          {isEstimate ? (
+            <div style={{ background: '#FFF0E8', padding: mm(4), display: 'grid', gap: mm(2.5) }}>
+              <div
+                style={{
+                  background: '#0b0b0b',
+                  color: '#ffffff',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: mm(4),
+                  padding: `${mm(3)} ${mm(4)}`,
+                  fontSize: pt(GRAND_TOTAL_TEXT_PT),
+                  fontWeight: 700,
+                }}
+              >
+                <span>{t('pdf.approxTotal')}</span>
+                <span>{fmtCurrency(grandTotal)}</span>
+              </div>
             </div>
-
-            {items.map((item, index) => {
-              const partName =
-                (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) ||
-                item.name ||
-                '';
-              const bg = index % 2 === 0 ? '#ffffff' : '#e5e7eb';
-
-              return (
+          ) : (
+            <>
+              <div style={{ border: '1px solid #e5e7eb', overflow: 'hidden' }}>
                 <div
-                  key={`${partName}-${index}`}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: TABLE_COLS_MM.map(mm).join(' '),
-                    background: bg,
-                    color: '#111827',
+                    background: '#0b0b0b',
+                    color: '#ffffff',
                     fontSize: pt(BODY_TEXT_PT),
-                    padding: `${mm(1.8)} 0`,
-                    borderTop: index === 0 ? 'none' : '1px solid #e5e7eb',
+                    fontWeight: 700,
+                    padding: `${mm(2)} 0`,
                   }}
                 >
-                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{index + 1}</div>
-                  <div style={{ paddingLeft: mm(2), paddingRight: mm(2), wordBreak: 'break-word' }}>{partName}</div>
-                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{item.qty || 1}</div>
-                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{fmtCurrency(item.unitPrice)}</div>
-                  <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{fmtCurrency(item.total)}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.srNo')}</div>
+                  <div style={{ paddingLeft: mm(2) }}>{t('pdf.description')}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.qty')}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{t('pdf.rate')}</div>
+                  <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{t('pdf.amount')}</div>
                 </div>
-              );
-            })}
-          </div>
 
-          <div style={{ background: '#FFF0E8', padding: mm(4), display: 'grid', gap: mm(2.5) }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
-              <span>{t('pdf.partsSubtotal')}</span>
-              <span>{fmtCurrency(partsSubtotal)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
-              <span>{t('pdf.labourCharges')}</span>
-              <span>{fmtCurrency(labourCharge)}</span>
-            </div>
-            {bill.isGST && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
-                  <span>{t('pdf.cgst')}</span>
-                  <span>{fmtCurrency(cgst)}</span>
+                {items.map((item, index) => {
+                  const partName =
+                    (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) ||
+                    item.name ||
+                    '';
+                  const bg = index % 2 === 0 ? '#ffffff' : '#e5e7eb';
+
+                  return (
+                    <div
+                      key={`${partName}-${index}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: TABLE_COLS_MM.map(mm).join(' '),
+                        background: bg,
+                        color: '#111827',
+                        fontSize: pt(BODY_TEXT_PT),
+                        padding: `${mm(1.8)} 0`,
+                        borderTop: index === 0 ? 'none' : '1px solid #e5e7eb',
+                      }}
+                    >
+                      <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{index + 1}</div>
+                      <div style={{ paddingLeft: mm(2), paddingRight: mm(2), wordBreak: 'break-word' }}>{partName}</div>
+                      <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{item.qty || 1}</div>
+                      <div style={{ textAlign: 'right', paddingRight: mm(1) }}>{fmtCurrency(item.unitPrice)}</div>
+                      <div style={{ textAlign: 'right', paddingRight: mm(2) }}>{fmtCurrency(item.total)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ background: '#FFF0E8', padding: mm(4), display: 'grid', gap: mm(2.5) }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
+                  <span>{t('pdf.partsSubtotal')}</span>
+                  <span>{fmtCurrency(partsSubtotal)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
-                  <span>{t('pdf.sgst')}</span>
-                  <span>{fmtCurrency(sgst)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#f06022', fontSize: pt(TOTAL_TEXT_PT), fontWeight: 700 }}>
+                  <span>{t('pdf.labourCharges')}</span>
+                  <span>{fmtCurrency(labourCharge)}</span>
                 </div>
-              </>
-            )}
-            <div
-              style={{
-                background: '#0b0b0b',
-                color: '#ffffff',
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: mm(4),
-                padding: `${mm(3)} ${mm(4)}`,
-                fontSize: pt(GRAND_TOTAL_TEXT_PT),
-                fontWeight: 700,
-              }}
-            >
-              <span>{t('pdf.grandTotal')}</span>
-              <span>{fmtCurrency(grandTotal)}</span>
-            </div>
-          </div>
+                {bill.isGST && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
+                      <span>{t('pdf.cgst')}</span>
+                      <span>{fmtCurrency(cgst)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: mm(4), color: '#6b7280', fontSize: pt(TOTAL_TEXT_PT) }}>
+                      <span>{t('pdf.sgst')}</span>
+                      <span>{fmtCurrency(sgst)}</span>
+                    </div>
+                  </>
+                )}
+                <div
+                  style={{
+                    background: '#0b0b0b',
+                    color: '#ffffff',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: mm(4),
+                    padding: `${mm(3)} ${mm(4)}`,
+                    fontSize: pt(GRAND_TOTAL_TEXT_PT),
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>{t('pdf.grandTotal')}</span>
+                  <span>{fmtCurrency(grandTotal)}</span>
+                </div>
+              </div>
+            </>
+          )}
 
           {!isEstimate && (qrCodeSrc || shop?.upiId) && (
             <div style={{ border: '1px solid #e5e7eb', padding: mm(4) }}>

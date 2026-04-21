@@ -316,10 +316,11 @@ export default function BillDetail() {
         job_photo_url:  nextJobPhotoUrl,
       };
 
-      // Recalculate balance due for advance bills
-      if (bill.status === 'advance') {
-        updateData.balance_due = Math.max(0, editGrandTotal - bill.paidAmount);
-      }
+      const nextBalanceDue =
+        bill.status === 'paid'
+          ? 0
+          : Math.max(0, editGrandTotal - Number(bill.paidAmount || 0));
+      updateData.balance_due = nextBalanceDue;
 
       const { error } = await supabase
         .from('bills')
@@ -337,7 +338,7 @@ export default function BillDetail() {
           sgst:           editSgst,
           grandTotal:     editGrandTotal,
           jobPhotoUrl:    nextJobPhotoUrl,
-          balanceDue:     bill.status === 'advance' ? Math.max(0, editGrandTotal - bill.paidAmount) : b.balanceDue,
+          balanceDue:     nextBalanceDue,
         }));
         setEditMode(false);
       }
@@ -349,15 +350,18 @@ export default function BillDetail() {
     if (!bill || !shop) return;
 
     const phone    = customer?.phone || bill.customerPhone || '';
-    const upiLine  = shop.upiId ? `\nPay via UPI: ${shop.upiId}` : '';
+    const vehicleLabel = [bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ');
     const msg =
-      `Hi ${customer?.name || 'Customer'},\n` +
-      `Your Bill:${bill.billNumber} from ${shop.shopName}\n` +
-      `Vehicle: ${[bill.vehicleNo, bill.vehicleBrand, bill.vehicleModel].filter(Boolean).join(' ')} is ready.\n` +
-      '\n' +
-      `Total: ₹${Number(bill.grandTotal || 0).toFixed(2)}${upiLine}\n` +
-      '\n' +
-      `Thank you! 🙏\nPowered by NatBolt Billu`;
+      `${t('bill.whatsappGreeting', { name: customer?.name || t('customer.name') })}\n` +
+      `${t('bill.whatsappIntro', { shopName: shop.shopName })}\n` +
+      `\n` +
+      `${t('bill.whatsappBillLine', { number: bill.billNumber })}\n` +
+      `${vehicleLabel ? `${t('bill.whatsappVehicleLine', { vehicle: vehicleLabel })}\n` : ''}` +
+      `${t('bill.whatsappTotalLine', { amount: Number(bill.grandTotal || 0).toFixed(2) })}\n` +
+      `${shop.upiId ? `${t('bill.whatsappPaymentLine', { upiId: shop.upiId })}\n` : ''}` + 
+      `\n` +
+      `${t('bill.whatsappClosing')}\n` + `\n` + 
+      `${t('pdf.poweredBy')}`;
 
     if (!phone) {
       setFeedback({
@@ -547,12 +551,18 @@ export default function BillDetail() {
               <Camera className="w-4 h-4 text-brand-mid" />
               <p className="section-label mb-0">Job Photo</p>
             </div>
-            <img
-              src={bill.jobPhotoUrl}
-              alt="Job photo"
-              className="w-full rounded-xl border-2 border-gray-200 object-cover"
-              style={{ maxHeight: '300px' }}
-            />
+            <div
+              className="overflow-hidden rounded-xl border-2 border-gray-200 bg-brand-light/40"
+              style={{ aspectRatio: '4 / 3', maxHeight: '300px' }}
+            >
+              <img
+                src={bill.jobPhotoUrl}
+                alt="Job photo"
+                className="h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
           </div>
         )}
 

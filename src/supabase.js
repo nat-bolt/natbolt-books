@@ -121,6 +121,7 @@ export function mapBill(row) {
     odoReading:            row.odo_reading != null ? String(row.odo_reading) : '',
     customerName:          row.customer_name,
     customerPhone:         row.customer_phone,
+    notes:                 row.notes || '',
     items:                 row.items || [],
     partsSubtotal:         Number(row.parts_subtotal || 0),
     labourCharge:          Number(row.labour_charge  || 0),

@@ -168,7 +168,7 @@ export default function Dashboard() {
   };
 
   const statusBadge = (b) => {
-    if (b.type === 'estimate') return <StatusBadge variant="estimate" size="md">EST</StatusBadge>;
+    if (b.type === 'estimate') return <StatusBadge variant="estimate" size="md">JOB</StatusBadge>;
     if (b.status === 'paid')   return <StatusBadge variant="paid" size="md">PAID</StatusBadge>;
     if (b.status === 'advance') return <StatusBadge variant="advance" size="md">ADV</StatusBadge>;
     if (b.status === 'void')   return <StatusBadge variant="void" size="md">VOID</StatusBadge>;

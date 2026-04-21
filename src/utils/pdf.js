@@ -130,10 +130,11 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
   const isEstimate    = bill.type === 'estimate';
   const isGST         = bill.isGST;
   const items         = bill.items || [];
-  const partsSubtotal = items.reduce((s, i) => s + (i.total || 0), 0);
+  const partsSubtotal = isEstimate ? 0 : items.reduce((s, i) => s + (i.total || 0), 0);
   const cgst          = isGST ? partsSubtotal * 0.09 : 0;
   const sgst          = isGST ? partsSubtotal * 0.09 : 0;
-  const grandTotal    = partsSubtotal + (bill.labourCharge || 0) + cgst + sgst;
+  const labourCharge  = Number(isEstimate ? (bill.grandTotal || bill.labourCharge || 0) : (bill.labourCharge || 0));
+  const grandTotal    = isEstimate ? labourCharge : partsSubtotal + labourCharge + cgst + sgst;
 
   let y = M;
 
@@ -192,7 +193,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
 
   // ── Document type badge ──────────────────────────────────────────────────────
   const docLabel = isEstimate
-    ? (t('pdf.estimate') + ' — ' + t('pdf.notTaxInvoice'))
+    ? t('pdf.jobCard')
     : isGST ? t('pdf.taxInvoice') : t('pdf.serviceBill');
 
   doc.setFillColor(...ACCENT);
@@ -294,7 +295,7 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     y += Math.max(metaLeft.length, metaRight.length) * 6 + 4;
   }
 
-  // ── Parts table ──────────────────────────────────────────────────────────────
+  // ── Parts table / Job Card total ────────────────────────────────────────────
   const colW = TABLE_COLS_MM; // Sr, Description, Qty, Rate, Amount
   const colX = [M, M+11, M+62, M+74, M+98];
   const RX   = colX[4] + colW[4]; // = 136mm — single right-align reference for all money
@@ -335,77 +336,88 @@ export async function generateBillPDF({ bill, shop, customer, t, lang }) {
     resetBodyStyle();
   };
 
-  drawTableHeader();
+  if (isEstimate) {
+    ensureSpace(24);
+    doc.setFillColor(...BRAND_LIGHT);
+    doc.rect(M, y, W - 2 * M, 17, 'F');
+    y += 4;
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(M + 4, y, W - (2 * M) - 8, 9, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFont(F, 'bold');
+    doc.setFontSize(10);
+    doc.text(t('pdf.approxTotal'), M + 6, y + 6.2);
+    doc.text(fmt(grandTotal), W - M - 6, y + 6.2, { align: 'right' });
+    y += 13;
+  } else {
+    drawTableHeader();
 
-  // Data rows
-  items.forEach((item, idx) => {
-    if (y + 6 > H - M - 28) {
-      startNewPage();
-      drawTableHeader();
+    // Data rows
+    items.forEach((item, idx) => {
+      if (y + 6 > H - M - 28) {
+        startNewPage();
+        drawTableHeader();
+      }
+
+      const bg = idx % 2 === 0 ? WHITE : LIGHT_GRAY;
+      doc.setFillColor(...bg);
+      doc.rect(M, y, W - 2 * M, 6, 'F');
+      doc.setTextColor(...TEXT);
+
+      const partName = (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) || item.name || '';
+
+      doc.text(String(idx + 1),                  colX[0] + colW[0], y + 4.2, { align: 'right' });
+      doc.text(partName.substring(0, 28),        colX[1],            y + 4.2);
+      doc.text(String(item.qty || 1),            colX[2] + colW[2], y + 4.2, { align: 'right' });
+      doc.text(fmt(item.unitPrice),              colX[3] + colW[3], y + 4.2, { align: 'right' });
+      doc.text(fmt(item.total),                  RX,                 y + 4.2, { align: 'right' });
+      y += 6;
+    });
+
+    ensureSpace((isGST ? 31 : 23) + (!isEstimate && (shop?.qrCodeUrl || shop?.upiId) ? 40 : 0) + 24);
+
+    // ── Totals: Parts Subtotal → Labour → GST → Grand Total ───────────────────
+    doc.setFillColor(...BRAND_LIGHT);
+    doc.rect(M, y, W - 2 * M, 6, 'F');
+    doc.setTextColor(...BRAND_MID);
+    doc.setFont(F, 'bold');
+    doc.setFontSize(8);
+    doc.text(t('pdf.partsSubtotal'), colX[1], y + 4.2);
+    doc.text(fmt(partsSubtotal), RX, y + 4.2, { align: 'right' });
+    y += 6;
+
+    y += 4;
+
+    doc.setFillColor(...BRAND_LIGHT);
+    doc.rect(M, y, W - 2 * M, 6, 'F');
+    doc.setTextColor(...BRAND_MID);
+    doc.setFont(F, 'bold');
+    doc.text(t('pdf.labourCharges'), colX[1], y + 4.2);
+    doc.text(fmt(labourCharge), RX, y + 4.2, { align: 'right' });
+    y += 6;
+
+    if (isGST) {
+      y += 4;
+      doc.setFont(F, 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY);
+      [[t('pdf.cgst'), cgst], [t('pdf.sgst'), sgst]].forEach(([label, val]) => {
+        doc.text(label,    RX - 38, y);
+        doc.text(fmt(val), RX,      y, { align: 'right' });
+        y += 5;
+      });
     }
 
-    const bg = idx % 2 === 0 ? WHITE : LIGHT_GRAY;
-    doc.setFillColor(...bg);
-    doc.rect(M, y, W - 2 * M, 6, 'F');
-    doc.setTextColor(...TEXT);
-
-    const partName = (lang === 'hi' ? item.nameHi : lang === 'te' ? item.nameTe : item.name) || item.name || '';
-
-    doc.text(String(idx + 1),                  colX[0] + colW[0], y + 4.2, { align: 'right' });
-    doc.text(partName.substring(0, 28),        colX[1],            y + 4.2);
-    doc.text(String(item.qty || 1),            colX[2] + colW[2], y + 4.2, { align: 'right' });
-    doc.text(fmt(item.unitPrice),              colX[3] + colW[3], y + 4.2, { align: 'right' });
-    doc.text(fmt(item.total),                  RX,                 y + 4.2, { align: 'right' });
-    y += 6;
-  });
-
-  ensureSpace((isGST ? 31 : 23) + (!isEstimate && (shop?.qrCodeUrl || shop?.upiId) ? 40 : 0) + 24);
-
-  // ── Totals: Parts Subtotal → Labour → GST → Grand Total ──────────────────────
-  // Parts Subtotal
-  doc.setFillColor(...BRAND_LIGHT);
-  doc.rect(M, y, W - 2 * M, 6, 'F');
-  doc.setTextColor(...BRAND_MID);
-  doc.setFont(F, 'bold');
-  doc.setFontSize(8);
-  doc.text(t('pdf.partsSubtotal'), colX[1], y + 4.2);
-  doc.text(fmt(partsSubtotal), RX, y + 4.2, { align: 'right' });
-  y += 6;
-
-  y += 4; // gap between subtotal and labour
-
-  // Labour Charges
-  doc.setFillColor(...BRAND_LIGHT);
-  doc.rect(M, y, W - 2 * M, 6, 'F');
-  doc.setTextColor(...BRAND_MID);
-  doc.setFont(F, 'bold');
-  doc.text(t('pdf.labourCharges'), colX[1], y + 4.2);
-  doc.text(fmt(bill.labourCharge || 0), RX, y + 4.2, { align: 'right' });
-  y += 6;
-
-  // GST rows
-  if (isGST) {
-    y += 4;
-    doc.setFont(F, 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...GRAY);
-    [[t('pdf.cgst'), cgst], [t('pdf.sgst'), sgst]].forEach(([label, val]) => {
-      doc.text(label,    RX - 38, y);
-      doc.text(fmt(val), RX,      y, { align: 'right' });
-      y += 5;
-    });
+    y += 3;
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(M, y, W - 2 * M, 9, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFont(F, 'bold');
+    doc.setFontSize(10);
+    doc.text(t('pdf.grandTotal'), M + 2, y + 6.2);
+    doc.text(fmt(grandTotal), RX, y + 6.2, { align: 'right' });
+    y += 12;
   }
-
-  // Grand Total band
-  y += 3;
-  doc.setFillColor(...BRAND_DARK);
-  doc.rect(M, y, W - 2 * M, 9, 'F');
-  doc.setTextColor(...WHITE);
-  doc.setFont(F, 'bold');
-  doc.setFontSize(10);
-  doc.text(t('pdf.grandTotal'), M + 2, y + 6.2);
-  doc.text(fmt(grandTotal), RX, y + 6.2, { align: 'right' });
-  y += 12;
 
   // ── Payment section (final bills only) ──────────────────────────────────────
   // SECURITY: We never auto-generate a QR from the UPI ID.

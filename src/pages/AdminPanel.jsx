@@ -94,7 +94,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
   const handleQrPick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setQrError('Must be PNG or JPG'); return; }
+    if (!file.type.startsWith('image/')) { setQrError(t('setup.qrImageError')); return; }
     setQrFile(file);
     setQrError('');
     const reader = new FileReader();
@@ -130,7 +130,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
   const handlePhotoPick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setPhotoError('Must be PNG or JPG'); return; }
+    if (!file.type.startsWith('image/')) { setPhotoError(t('setup.photoImageError')); return; }
     setPhotoFile(file);
     setPhotoError('');
     const reader = new FileReader();
@@ -175,7 +175,7 @@ function ShopFormModal({ existing, onSave, onClose }) {
         : '';
 
     if (!e164) {
-      setError('Enter a valid 10-digit mobile number');
+      setError(t('customer.invalidPhone'));
       return;
     }
 
@@ -309,7 +309,7 @@ Happy billing! 🚀
       onClose();
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Something went wrong');
+      setError(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -325,7 +325,7 @@ Happy billing! 🚀
 
     if (targetStep === 1) {
       if (!form.phone.trim()) {
-        setError('Phone number is required');
+        setError(t('admin.phoneRequired'));
         return false;
       }
     }
@@ -339,7 +339,7 @@ Happy billing! 🚀
 
     if (targetStep === 3) {
       if (form.mapsUrl.trim() && !isSafeUrl(form.mapsUrl.trim())) {
-        setError('Google Maps link must be a valid https:// URL');
+        setError(t('admin.mapsInvalid'));
         return false;
       }
       if (!displayPhoto) {
@@ -379,7 +379,7 @@ Happy billing! 🚀
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
           <div>
             <h2 className="text-xl font-bold text-brand-dark">
-              {existing ? 'Edit Shop' : 'Register New Shop'}
+              {existing ? t('admin.editShop') : t('admin.registerNewShop')}
             </h2>
             <p className="mt-1 text-xs text-gray-500">
               {steps[step]}
@@ -427,14 +427,14 @@ Happy billing! 🚀
               <>
                 <div>
                   <label className="section-label">
-                    Phone Number * <span className="text-gray-400 font-normal">(10 digits or +91...)</span>
+                    {t('setup.phone')} * <span className="text-gray-400 font-normal">({t('admin.phoneHelper')})</span>
                   </label>
-                  <input className="input-field" type="tel" placeholder="9876543210"
+                  <input className="input-field" type="tel" placeholder={t('customer.phonePlaceholder')}
                     value={form.phone} onChange={setField('phone')}
                     disabled={!!existing}
                   />
                   {existing && (
-                    <p className="text-xs text-gray-400 mt-1">Phone cannot be changed after registration</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('admin.phoneLocked')}</p>
                   )}
                 </div>
 
@@ -509,19 +509,19 @@ Happy billing! 🚀
                       />
                       <div className="flex-1 space-y-1.5">
                         {qrPreview
-                          ? <p className="text-xs text-amber-600 font-medium">New QR selected — will upload on save</p>
-                          : <p className="text-xs text-green-600 font-medium">✓ QR code set</p>
+                          ? <p className="text-xs text-amber-600 font-medium">{t('admin.newQrSelected')}</p>
+                          : <p className="text-xs text-green-600 font-medium">{t('settings.qrSet')}</p>
                         }
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
                           className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
                         >
-                          {qrPreview ? 'Choose different image' : 'Replace QR image'}
+                          {qrPreview ? t('admin.chooseDifferentImage') : t('settings.replaceQr')}
                         </button>
                         {qrPreview && (
                           <button type="button" onClick={clearQrPick} className="w-full text-xs text-gray-400 py-1">
-                            Clear selection
+                            {t('admin.clearSelection')}
                           </button>
                         )}
                       </div>
@@ -559,7 +559,7 @@ Happy billing! 🚀
                 </div>
 
                 <div>
-                  <label className="section-label">Plan</label>
+                  <label className="section-label">{t('settings.plan')}</label>
                   <div className="flex gap-2">
                     {['free', 'paid'].map((p) => (
                       <button
@@ -568,7 +568,7 @@ Happy billing! 🚀
                         className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${form.plan === p ? 'bg-brand-mid text-white' : 'bg-gray-100 text-gray-600'}`}
                         onClick={() => setForm((f) => ({ ...f, plan: p }))}
                       >
-                        {p === 'free' ? '🆓 Free (30 bills/mo)' : '⭐ Paid (Unlimited)'}
+                        {p === 'free' ? t('admin.freeOption') : t('admin.paidOption')}
                       </button>
                     ))}
                   </div>
@@ -589,19 +589,19 @@ Happy billing! 🚀
                       />
                       <div className="flex-1 space-y-1.5">
                         {photoPreview
-                          ? <p className="text-xs text-amber-600 font-medium">New photo selected — will upload on save</p>
-                          : <p className="text-xs text-green-600 font-medium">✓ Shop photo set</p>
+                          ? <p className="text-xs text-amber-600 font-medium">{t('admin.newPhotoSelected')}</p>
+                          : <p className="text-xs text-green-600 font-medium">{t('settings.shopPhotoSet')}</p>
                         }
                         <button
                           type="button"
                           onClick={() => photoInputRef.current?.click()}
                           className="w-full border border-dashed border-gray-300 rounded-xl py-1.5 text-xs text-gray-500"
                         >
-                          {photoPreview ? 'Choose different image' : 'Replace photo'}
+                          {photoPreview ? t('admin.chooseDifferentImage') : t('settings.replacePhoto')}
                         </button>
                         {photoPreview && (
                           <button type="button" onClick={clearPhotoPick} className="w-full text-xs text-gray-400 py-1">
-                            Clear selection
+                            {t('admin.clearSelection')}
                           </button>
                         )}
                       </div>
@@ -651,9 +651,9 @@ Happy billing! 🚀
               disabled={saving}
             >
               {saving
-                ? (qrFile || photoFile ? 'Saving files...' : 'Saving...')
+                ? (qrFile || photoFile ? t('admin.savingFiles') : t('settings.saving'))
                 : step === steps.length - 1
-                  ? (existing ? 'Save Changes' : 'Register Shop')
+                  ? (existing ? t('settings.save') : t('admin.registerShop'))
                   : (
                     <span className="inline-flex items-center gap-2">
                       {t('setup.next')}
@@ -670,6 +670,7 @@ Happy billing! 🚀
 
 // ── Network Analytics Section ─────────────────────────────────────────────────
 function NetworkAnalytics() {
+  const { t } = useTranslation();
   const [open, setOpen]         = useState(false);
   const [loading, setLoading]   = useState(false);
   const [parts, setParts]       = useState([]);
@@ -691,7 +692,7 @@ function NetworkAnalytics() {
       setByPincode(pincodeData || []);
     } catch (err) {
       console.error('[AdminPanel] analytics error:', err);
-      setError(err.message || 'Failed to load analytics');
+      setError(err.message || t('admin.analyticsLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -720,8 +721,8 @@ function NetworkAnalytics() {
           <BarChart2 className="w-5 h-5 text-indigo-600" />
         </div>
         <div className="flex-1">
-          <p className="font-bold text-indigo-800 text-sm">Network Analytics</p>
-          <p className="text-xs text-indigo-500">Cross-shop parts trends · Geographic breakdown</p>
+          <p className="font-bold text-indigo-800 text-sm">{t('admin.networkAnalytics')}</p>
+          <p className="text-xs text-indigo-500">{t('admin.networkAnalyticsSubtitle')}</p>
         </div>
         <ChevronDown className="w-5 h-5 text-indigo-400" />
       </button>
@@ -734,7 +735,7 @@ function NetworkAnalytics() {
       <div className="bg-indigo-600 text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-5 h-5" />
-          <span className="font-bold">Network Analytics</span>
+          <span className="font-bold">{t('admin.networkAnalytics')}</span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => load(days)} className="p-1 rounded-lg bg-white/20">
@@ -755,7 +756,7 @@ function NetworkAnalytics() {
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold ${days === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
               onClick={() => handleDaysChange(d)}
             >
-              {d === 7 ? 'Last 7 days' : d === 30 ? 'Last 30 days' : 'Last 90 days'}
+              {d === 7 ? t('admin.last7Days') : d === 30 ? t('admin.last30Days') : t('admin.last90Days')}
             </button>
           ))}
         </div>
@@ -775,12 +776,12 @@ function NetworkAnalytics() {
               <div className="flex items-center gap-2 mb-3">
                 <Package className="w-4 h-4 text-indigo-600" />
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Top Parts Across All Shops
+                  {t('admin.topPartsAcrossShops')}
                 </p>
               </div>
 
               {parts.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">No bill data in this period</p>
+                <p className="text-sm text-gray-400 text-center py-4">{t('admin.noBillData')}</p>
               ) : (
                 <div className="space-y-2">
                   {parts.map((p, i) => (
@@ -811,11 +812,12 @@ function NetworkAnalytics() {
               {/* Upsell insight */}
               {parts.length > 0 && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                  <p className="text-xs font-bold text-amber-800 mb-1">💡 Conversion Insight</p>
+                  <p className="text-xs font-bold text-amber-800 mb-1">{t('admin.conversionInsight')}</p>
                   <p className="text-xs text-amber-700">
-                    Top parts like <strong>{parts[0]?.part_name}</strong> are used across{' '}
-                    <strong>{parts[0]?.shop_count}</strong> shops. Shops on the Paid plan can see
-                    these trends themselves — use this to pitch upgrades.
+                    {t('admin.conversionInsightBody', {
+                      partName: parts[0]?.part_name,
+                      shopCount: parts[0]?.shop_count,
+                    })}
                   </p>
                 </div>
               )}
@@ -826,12 +828,12 @@ function NetworkAnalytics() {
               <div className="flex items-center gap-2 mb-3">
                 <MapPin className="w-4 h-4 text-indigo-600" />
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Shops by Pincode
+                  {t('admin.shopsByPincode')}
                 </p>
               </div>
 
               {byPincode.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">No pincode data yet</p>
+                <p className="text-sm text-gray-400 text-center py-4">{t('admin.noPincodeData')}</p>
               ) : (
                 <div className="space-y-2">
                   {byPincode.map((row) => (
@@ -869,6 +871,7 @@ function NetworkAnalytics() {
 
 // ── Main Admin Panel ──────────────────────────────────────────────────────────
 export default function AdminPanel() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user, isAdmin, authLoading, setUser, setShop, setIsAdmin } = useStore();
   const adminCacheKey = `${ADMIN_SHOPS_CACHE_PREFIX}:${user?.uid || 'anon'}`;
@@ -946,11 +949,11 @@ export default function AdminPanel() {
   };
 
   const handleShopSaved = (saved) => {
-    setNotice({
-      tone: 'success',
-      title: modal === 'create' ? 'Shop registered' : 'Shop updated',
-      body: `${saved.shopName || 'Shop'} is ready in the admin list.`,
-    });
+      setNotice({
+        tone: 'success',
+        title: modal === 'create' ? t('admin.shopRegistered') : t('admin.shopUpdated'),
+        body: t('admin.shopReadyBody', { shopName: saved.shopName || t('admin.shopFallback') }),
+      });
     setShops((prev) => {
       const idx = prev.findIndex((s) => s.id === saved.id);
       if (idx >= 0) {
@@ -977,15 +980,18 @@ export default function AdminPanel() {
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, plan: newPlan } : s));
       setNotice({
         tone: 'success',
-        title: newPlan === 'paid' ? 'Plan upgraded' : 'Plan downgraded',
-        body: `${shop.shopName} is now on the ${newPlan === 'paid' ? 'Paid' : 'Free'} plan.`,
+        title: newPlan === 'paid' ? t('admin.planUpgraded') : t('admin.planDowngraded'),
+        body: t('admin.planBody', {
+          shopName: shop.shopName,
+          plan: newPlan === 'paid' ? t('admin.paidShort') : t('admin.freeShort'),
+        }),
       });
     } catch (err) {
       console.error('[AdminPanel] toggle plan error:', err);
       setNotice({
         tone: 'danger',
-        title: 'Plan update failed',
-        body: err.message || 'Please try again.',
+        title: t('admin.planUpdateFailed'),
+        body: err.message || t('common.error'),
       });
     } finally {
       setBusyShopId(null);
@@ -1007,15 +1013,15 @@ export default function AdminPanel() {
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, billsThisMonth: 0 } : s));
       setNotice({
         tone: 'success',
-        title: 'Bill count reset',
-        body: `${shop.shopName} can start a fresh Free-plan billing cycle.`,
+        title: t('admin.billCountReset'),
+        body: t('admin.billCountResetBody', { shopName: shop.shopName }),
       });
     } catch (err) {
       console.error('[AdminPanel] reset bill count error:', err);
       setNotice({
         tone: 'danger',
-        title: 'Reset failed',
-        body: err.message || 'Please try again.',
+        title: t('admin.resetFailed'),
+        body: err.message || t('common.error'),
       });
     } finally {
       setBusyShopId(null);
@@ -1040,15 +1046,15 @@ export default function AdminPanel() {
       await loadShops();
       setNotice({
         tone: 'warning',
-        title: 'Shop deactivated',
-        body: `${shop.shopName} is now hidden from the active list and can be restored later.`,
+        title: t('admin.shopDeactivated'),
+        body: t('admin.shopDeactivatedBody', { shopName: shop.shopName }),
       });
     } catch (err) {
       console.error('[AdminPanel] deactivate shop error:', err);
       setNotice({
         tone: 'danger',
-        title: 'Deactivate failed',
-        body: err.message || 'Please try again.',
+        title: t('admin.deactivateFailed'),
+        body: err.message || t('common.error'),
       });
     } finally {
       setBusyShopId(null);
@@ -1073,15 +1079,15 @@ export default function AdminPanel() {
       await loadShops();
       setNotice({
         tone: 'success',
-        title: 'Shop reactivated',
-        body: `${shop.shopName} is back in the active list.`,
+        title: t('admin.shopReactivated'),
+        body: t('admin.shopReactivatedBody', { shopName: shop.shopName }),
       });
     } catch (err) {
       console.error('[AdminPanel] reactivate shop error:', err);
       setNotice({
         tone: 'danger',
-        title: 'Reactivate failed',
-        body: err.message || 'Please try again.',
+        title: t('admin.reactivateFailed'),
+        body: err.message || t('common.error'),
       });
     } finally {
       setBusyShopId(null);
@@ -1113,7 +1119,7 @@ export default function AdminPanel() {
   }, [shops]);
 
   if (authLoading) return (
-    <Layout title="NatBolt Admin" showNav={false} showLanguage={false}>
+    <Layout title={t('admin.title')} showNav={false} showLanguage={false}>
       <div className="flex justify-center py-16">
         <div className="w-10 h-10 border-4 border-brand-mid border-t-transparent rounded-full animate-spin" />
       </div>
@@ -1126,7 +1132,7 @@ export default function AdminPanel() {
       showLanguage={false}
       titleNode={(
         <div>
-          <h1 className="text-lg font-bold">NatBolt Admin</h1>
+          <h1 className="text-lg font-bold">{t('admin.title')}</h1>
           <p className="text-xs text-gray-500">{user?.phoneNumber}</p>
         </div>
       )}
@@ -1147,19 +1153,19 @@ export default function AdminPanel() {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
             <p className="text-2xl font-bold text-brand-dark">{stats.total}</p>
-            <p className="text-xs text-gray-500">Total Shops</p>
+            <p className="text-xs text-gray-500">{t('admin.totalShops')}</p>
           </div>
           <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
             <p className="text-2xl font-bold text-indigo-600">{stats.newThisMonth}</p>
-            <p className="text-xs text-gray-500">New This Month</p>
+            <p className="text-xs text-gray-500">{t('admin.newThisMonth')}</p>
           </div>
           <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
             <p className="text-2xl font-bold text-green-600">{stats.paid}</p>
-            <p className="text-xs text-gray-500">⭐ Paid</p>
+            <p className="text-xs text-gray-500">{t('admin.paid')}</p>
           </div>
           <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
             <p className="text-2xl font-bold text-amber-500">{stats.free}</p>
-            <p className="text-xs text-gray-500">🆓 Free</p>
+            <p className="text-xs text-gray-500">{t('admin.free')}</p>
           </div>
         </div>
 
@@ -1170,7 +1176,7 @@ export default function AdminPanel() {
             <div>
               <p className="font-bold text-lg">{stats.conversionPct}%</p>
               <p className="text-xs opacity-80">
-                Conversion rate — {stats.paid} of {stats.total} shops on Paid plan
+                {t('admin.conversionRate', { paid: stats.paid, total: stats.total })}
               </p>
             </div>
           </div>
@@ -1185,13 +1191,13 @@ export default function AdminPanel() {
           onClick={() => setModal('create')}
         >
           <Plus className="w-5 h-5" />
-          Register New Shop
+          {t('admin.registerNewShop')}
         </button>
 
         {/* ── Shops list ── */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold text-brand-mid uppercase tracking-wide">Registered Shops</p>
+            <p className="text-xs font-bold text-brand-mid uppercase tracking-wide">{t('admin.registeredShops')}</p>
             <button onClick={loadShops} className="text-brand-mid">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -1204,7 +1210,7 @@ export default function AdminPanel() {
           ) : shops.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center text-gray-400 shadow-sm">
               <Store className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-              No shops registered yet
+              {t('admin.noShops')}
             </div>
           ) : (
             <div className="space-y-2">
@@ -1215,7 +1221,7 @@ export default function AdminPanel() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-brand-dark truncate">{shop.shopName}</p>
                         <StatusBadge variant={shop.plan === 'paid' ? 'paid' : 'neutral'}>
-                          {shop.plan === 'paid' ? 'Paid' : 'Free'}
+                          {shop.plan === 'paid' ? t('admin.paidShort') : t('admin.freeShort')}
                         </StatusBadge>
                         {shop.plan === 'free' ? (
                           <StatusBadge variant="warning">
@@ -1249,7 +1255,7 @@ export default function AdminPanel() {
                       className="inline-flex items-center gap-1 rounded-xl border border-[#E8DED3] bg-[#F8F3EC] px-2.5 py-2 text-xs font-semibold text-brand-dark shadow-sm"
                       onClick={() => setModal(shop)}
                     >
-                      Edit
+                      {t('common.edit')}
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -1261,14 +1267,14 @@ export default function AdminPanel() {
                         onClick={() => setConfirmState({ type: 'deactivate', shop })}
                         disabled={busyShopId === shop.id && busyAction === 'deactivate'}
                       >
-                        {busyShopId === shop.id && busyAction === 'deactivate' ? 'Deactivating...' : 'Deactivate Shop'}
+                        {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
                       </button>
                       <button
                         className="w-full rounded-xl py-2 text-xs font-bold bg-gray-100 text-gray-600"
                         onClick={() => togglePlan(shop)}
                         disabled={busyShopId === shop.id && busyAction === 'plan'}
                       >
-                        {busyShopId === shop.id && busyAction === 'plan' ? 'Updating...' : 'Downgrade to Free'}
+                        {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.downgradeToFree')}
                       </button>
                     </div>
                   ) : (
@@ -1278,21 +1284,21 @@ export default function AdminPanel() {
                         onClick={() => togglePlan(shop)}
                         disabled={busyShopId === shop.id && busyAction === 'plan'}
                       >
-                        {busyShopId === shop.id && busyAction === 'plan' ? 'Updating...' : 'Upgrade to Paid'}
+                        {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.upgradeToPaid')}
                       </button>
                       <button
                         className="w-full rounded-xl py-2 text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200"
                         onClick={() => setConfirmState({ type: 'reset', shop })}
                         disabled={busyShopId === shop.id && busyAction === 'reset'}
                       >
-                        {busyShopId === shop.id && busyAction === 'reset' ? 'Resetting...' : 'Reset Bill Count'}
+                        {busyShopId === shop.id && busyAction === 'reset' ? t('admin.resetting') : t('admin.resetBillCount')}
                       </button>
                       <button
                         className="w-full rounded-xl py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-200"
                         onClick={() => setConfirmState({ type: 'deactivate', shop })}
                         disabled={busyShopId === shop.id && busyAction === 'deactivate'}
                       >
-                        {busyShopId === shop.id && busyAction === 'deactivate' ? 'Deactivating...' : 'Deactivate Shop'}
+                        {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
                       </button>
                     </div>
                   )}
@@ -1312,7 +1318,7 @@ export default function AdminPanel() {
               <div className="flex items-center gap-2">
                 <Archive className="w-4 h-4 text-gray-500" />
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Deactivated Shops ({deactivatedShops.length})
+                  {t('admin.deactivatedShops', { count: deactivatedShops.length })}
                 </p>
               </div>
               {showDeactivated ? (
@@ -1331,13 +1337,13 @@ export default function AdminPanel() {
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-gray-700 truncate">{shop.shopName}</p>
                           <StatusBadge variant="danger">
-                            Deactivated
+                            {t('admin.deactivated')}
                           </StatusBadge>
                         </div>
                         <p className="text-sm text-gray-500">{shop.ownerName}</p>
                         <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          Deactivated: {new Date(shop.deletedAt).toLocaleDateString('en-IN', {
+                          {t('admin.deactivatedOn')}: {new Date(shop.deletedAt).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric'
@@ -1352,7 +1358,7 @@ export default function AdminPanel() {
                       disabled={busyShopId === shop.id && busyAction === 'reactivate'}
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      {busyShopId === shop.id && busyAction === 'reactivate' ? 'Reactivating...' : 'Reactivate Shop'}
+                      {busyShopId === shop.id && busyAction === 'reactivate' ? t('admin.reactivating') : t('admin.reactivateShop')}
                     </button>
                   </div>
                 ))}
@@ -1375,30 +1381,30 @@ export default function AdminPanel() {
         open={!!confirmState}
         title={
           confirmState?.type === 'deactivate'
-            ? `Deactivate ${confirmState.shop?.shopName || 'shop'}?`
+            ? t('admin.confirmDeactivateTitle', { shopName: confirmState.shop?.shopName || t('admin.shopFallback') })
             : confirmState?.type === 'reactivate'
-              ? `Reactivate ${confirmState.shop?.shopName || 'shop'}?`
+              ? t('admin.confirmReactivateTitle', { shopName: confirmState.shop?.shopName || t('admin.shopFallback') })
               : confirmState?.type === 'reset'
-                ? `Reset bill count for ${confirmState.shop?.shopName || 'shop'}?`
+                ? t('admin.confirmResetTitle', { shopName: confirmState.shop?.shopName || t('admin.shopFallback') })
                 : ''
         }
         body={
           confirmState?.type === 'deactivate'
-            ? 'This hides the shop from the active list, blocks shop-owner login, and keeps all data for audit and recovery.'
+            ? t('admin.confirmDeactivateBody')
             : confirmState?.type === 'reactivate'
-              ? 'This returns the shop to the active list and allows the shop owner to log in again.'
+              ? t('admin.confirmReactivateBody')
               : confirmState?.type === 'reset'
-                ? 'This clears the Free-plan bill counter for the current month so the shop can keep billing.'
+                ? t('admin.confirmResetBody')
                 : ''
         }
         confirmLabel={
           confirmState?.type === 'deactivate'
-            ? 'Deactivate Shop'
+            ? t('admin.deactivateShop')
             : confirmState?.type === 'reactivate'
-              ? 'Reactivate Shop'
+              ? t('admin.reactivateShop')
               : confirmState?.type === 'reset'
-                ? 'Reset Bill Count'
-                : 'Confirm'
+                ? t('admin.resetBillCount')
+                : t('common.confirm')
         }
         tone={confirmState?.type === 'deactivate' ? 'danger' : 'warning'}
         onCancel={() => setConfirmState(null)}

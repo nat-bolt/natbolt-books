@@ -541,7 +541,7 @@ export default function CustomerProfile() {
                             {bill.vehicleNo || '—'}
                           </p>
                           <StatusBadge variant={bill.type === 'estimate' ? 'estimate' : 'bill'}>
-                            {bill.type === 'estimate' ? 'EST' : 'BILL'}
+                            {bill.type === 'estimate' ? 'JOB' : 'BILL'}
                           </StatusBadge>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-gray-400">
