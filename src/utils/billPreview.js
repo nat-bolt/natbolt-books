@@ -1,4 +1,5 @@
 const dataUrlCache = new Map();
+let html2canvasPromise = null;
 
 async function waitForImages(container) {
   const images = Array.from(container.querySelectorAll('img'));
@@ -40,6 +41,13 @@ async function waitForPaint() {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
+export function preloadBillPreviewRenderer() {
+  if (!html2canvasPromise) {
+    html2canvasPromise = import('html2canvas');
+  }
+  return html2canvasPromise;
+}
+
 export async function resolveBillPreviewAssets({ bill, shop }) {
   const [shopPhotoUrl, jobPhotoUrl, qrCodeUrl] = await Promise.all([
     toDataUrl(shop?.shopPhotoUrl || ''),
@@ -60,7 +68,7 @@ export async function generateBillPreviewImage(container) {
   await waitForImages(container);
   await waitForPaint();
 
-  const { default: html2canvas } = await import('html2canvas');
+  const { default: html2canvas } = await preloadBillPreviewRenderer();
   const canvas = await html2canvas(container, {
     backgroundColor: '#f5f5f5',
     useCORS: true,

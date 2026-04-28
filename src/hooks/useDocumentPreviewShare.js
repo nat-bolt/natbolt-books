@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { getBillPDFBlob } from '../utils/pdf';
-import { generateBillPreviewImage, resolveBillPreviewAssets } from '../utils/billPreview';
+import { getBillPDFBlob, warmPdfResources } from '../utils/pdf';
+import {
+  generateBillPreviewImage,
+  preloadBillPreviewRenderer,
+  resolveBillPreviewAssets,
+} from '../utils/billPreview';
 
 export default function useDocumentPreviewShare({
   bill,
@@ -19,9 +23,13 @@ export default function useDocumentPreviewShare({
   const previewAssetsRef = useRef({});
   const awaitingWhatsAppReturnRef = useRef(false);
   const whatsappBackgroundedRef = useRef(false);
+  const pdfBlobRef = useRef(null);
+  const pdfBlobPromiseRef = useRef(null);
 
   useEffect(() => {
     previewAssetsRef.current = {};
+    pdfBlobRef.current = null;
+    pdfBlobPromiseRef.current = null;
     setPreviewAssets({});
   }, [bill?.id, bill?.updatedAt, bill?.jobPhotoUrl, shop?.id, shop?.updatedAt, shop?.shopPhotoUrl, shop?.qrCodeUrl]);
 
@@ -78,6 +86,84 @@ export default function useDocumentPreviewShare({
     lang: language,
   });
 
+  const ensurePdfBlob = async () => {
+    if (!bill || !shop) throw new Error('Document preview not ready');
+    if (pdfBlobRef.current) return pdfBlobRef.current;
+    if (pdfBlobPromiseRef.current) return pdfBlobPromiseRef.current;
+
+    pdfBlobPromiseRef.current = (async () => {
+      const assets = await ensurePreviewAssets();
+      const blob = await getBillPDFBlob(buildPdfParams(assets));
+      pdfBlobRef.current = blob;
+      return blob;
+    })();
+
+    try {
+      return await pdfBlobPromiseRef.current;
+    } finally {
+      pdfBlobPromiseRef.current = null;
+    }
+  };
+
+  const downloadBlob = (blob) => {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  const shareBlob = async (blob) => {
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    let canShareFile = false;
+    try {
+      canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+    } catch (_) {}
+
+    if (canShareFile && typeof navigator.share === 'function') {
+      await navigator.share({ files: [file], title: filename.replace(/\.pdf$/i, '') });
+      return true;
+    }
+
+    return false;
+  };
+
+  useEffect(() => {
+    if (!bill || !shop) return;
+
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const warm = async () => {
+      try {
+        await Promise.allSettled([
+          ensurePreviewAssets(),
+          warmPdfResources(),
+          preloadBillPreviewRenderer(),
+        ]);
+        if (cancelled) return;
+        await ensurePdfBlob();
+      } catch (_) {}
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(() => { warm(); }, { timeout: 2200 });
+    } else {
+      timeoutId = window.setTimeout(() => { warm(); }, 900);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId) window.cancelIdleCallback(idleId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [bill?.id, bill?.updatedAt, shop?.id, shop?.updatedAt]);
+
   const handlePreviewPDF = async () => {
     if (!bill || !shop) return;
     if (pdfPreviewImage) setPdfPreviewImage('');
@@ -104,16 +190,20 @@ export default function useDocumentPreviewShare({
     if (!bill || !shop) return;
     setPdfLoading(true);
     try {
-      const assets = await ensurePreviewAssets();
-      const blob = await getBillPDFBlob(buildPdfParams(assets));
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      const blob = await ensurePdfBlob();
+      downloadBlob(blob);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleSharePreview = async () => {
+    if (!bill || !shop) return;
+    setPdfLoading(true);
+    try {
+      const blob = await ensurePdfBlob();
+      const shared = await shareBlob(blob);
+      if (!shared) downloadBlob(blob);
     } finally {
       setPdfLoading(false);
     }
@@ -123,27 +213,9 @@ export default function useDocumentPreviewShare({
     if (!bill || !shop) return;
     setPdfLoading(true);
     try {
-      const assets = await ensurePreviewAssets();
-      const blob = await getBillPDFBlob(buildPdfParams(assets));
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      let canShareFile = false;
-      try {
-        canShareFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
-      } catch (_) {}
-
-      if (canShareFile && typeof navigator.share === 'function') {
-        await navigator.share({ files: [file] });
-      } else {
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }
+      const blob = await ensurePdfBlob();
+      const shared = await shareBlob(blob);
+      if (!shared) downloadBlob(blob);
 
       setShowWhatsAppReturnPrompt(false);
     } finally {
@@ -168,6 +240,7 @@ export default function useDocumentPreviewShare({
     handlePreviewPDF,
     handleClosePreview,
     handleDownloadPreview,
+    handleSharePreview,
     handleSharePdfAfterWhatsApp,
     registerWhatsAppLaunch,
   };

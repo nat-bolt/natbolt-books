@@ -1,4 +1,4 @@
-import { Download, X } from 'lucide-react';
+import { Download, Share2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function PdfPreviewModal({
@@ -7,6 +7,7 @@ export default function PdfPreviewModal({
   loading,
   onClose,
   onDownload,
+  onShare,
 }) {
   const { t } = useTranslation();
 
@@ -31,15 +32,26 @@ export default function PdfPreviewModal({
             <span className="sr-only">{t('common.close')}</span>
           </button>
           <p className="min-w-0 flex-1 truncate text-center text-sm font-bold text-brand-dark">{t('bill.viewPdf')}</p>
-          <button
-            type="button"
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-mid px-4 text-sm font-semibold text-white disabled:opacity-60"
-            onClick={onDownload}
-            disabled={!previewImageUrl || loading}
-          >
-            <Download className="w-4 h-4" />
-            {t('bill.downloadPdf')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand-mid/20 bg-white text-brand-mid disabled:opacity-60"
+              onClick={onShare}
+              disabled={!previewImageUrl || loading}
+            >
+              <Share2 className="w-4 h-4" />
+              <span className="sr-only">{t('common.share')}</span>
+            </button>
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-mid text-white disabled:opacity-60"
+              onClick={onDownload}
+              disabled={!previewImageUrl || loading}
+            >
+              <Download className="w-4 h-4" />
+              <span className="sr-only">{t('bill.downloadPdf')}</span>
+            </button>
+          </div>
         </div>
       </div>
 

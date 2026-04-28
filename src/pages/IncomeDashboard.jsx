@@ -92,6 +92,36 @@ function getPeriodRange(period) {
   return { start: start.toISOString(), end: now.toISOString() };
 }
 
+function buildIncomeStatsFromBills(bills) {
+  const totalRevenue = bills.reduce((sum, bill) => sum + (bill.grandTotal || 0), 0);
+  const collected = bills.reduce((sum, bill) => {
+    if (bill.status === 'paid') return sum + (bill.grandTotal || 0);
+    if (bill.status === 'advance') return sum + (bill.paidAmount || 0);
+    return sum;
+  }, 0);
+  const byMode = { cash: 0, upi: 0, advance: 0, unpaid: 0 };
+
+  bills.forEach((bill) => {
+    if (bill.status === 'paid') {
+      if ((bill.paymentMode || '').toLowerCase() === 'upi') byMode.upi += bill.grandTotal || 0;
+      else byMode.cash += bill.grandTotal || 0;
+    } else if (bill.status === 'advance') {
+      byMode.advance += bill.paidAmount || 0;
+    } else {
+      byMode.unpaid += bill.grandTotal || 0;
+    }
+  });
+
+  return {
+    totalRevenue,
+    collected,
+    outstanding: totalRevenue - collected,
+    avgValue: bills.length > 0 ? Math.round(totalRevenue / bills.length) : 0,
+    byMode,
+    billCount: bills.length,
+  };
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function IncomeDashboard() {
   const navigate     = useNavigate();
@@ -105,6 +135,14 @@ export default function IncomeDashboard() {
 
   const [period, setPeriod]   = useState(validPeriod);
   const [bills, setBills]     = useState([]);
+  const [stats, setStats]     = useState({
+    totalRevenue: 0,
+    collected: 0,
+    outstanding: 0,
+    avgValue: 0,
+    byMode: { cash: 0, upi: 0, advance: 0, unpaid: 0 },
+    billCount: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
 
@@ -124,18 +162,49 @@ export default function IncomeDashboard() {
     try {
       const { start, end } = getPeriodRange(period);
 
-      const { data, error: err } = await supabase
-        .from('bills')
-        .select('id, grand_total, status, payment_mode, paid_amount, items, created_at')
-        .eq('shop_id', shop.id)
-        .eq('type', 'bill')
-        .neq('status', 'void')
-        .gte('created_at', start)
-        .lte('created_at', end)
-        .order('created_at', { ascending: true });
+      const [billsResult, summaryResult] = await Promise.all([
+        supabase
+          .from('bills')
+          .select('id, bill_number, customer_name, vehicle_no, grand_total, status, payment_mode, paid_amount, balance_due, items, created_at')
+          .eq('shop_id', shop.id)
+          .eq('type', 'bill')
+          .neq('status', 'void')
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .order('created_at', { ascending: true }),
+        supabase.rpc('get_income_summary', {
+          p_shop_id: shop.id,
+          p_start: start,
+          p_end: end,
+        }),
+      ]);
 
-      if (err) throw err;
-      setBills((data || []).map(mapBill));
+      if (billsResult.error) throw billsResult.error;
+
+      const mappedBills = (billsResult.data || []).map(mapBill);
+      const fallbackStats = buildIncomeStatsFromBills(mappedBills);
+      setBills(mappedBills);
+
+      const summary = !summaryResult.error
+        ? (Array.isArray(summaryResult.data) ? summaryResult.data[0] : summaryResult.data)
+        : null;
+      setStats({
+        totalRevenue: Number(summary?.total_revenue ?? fallbackStats.totalRevenue),
+        collected: Number(summary?.collected ?? fallbackStats.collected),
+        outstanding: Number(summary?.outstanding ?? fallbackStats.outstanding),
+        avgValue: Math.round(Number(summary?.avg_value ?? fallbackStats.avgValue)),
+        byMode: {
+          cash: Number(summary?.cash_total ?? fallbackStats.byMode.cash),
+          upi: Number(summary?.upi_total ?? fallbackStats.byMode.upi),
+          advance: Number(summary?.advance_total ?? fallbackStats.byMode.advance),
+          unpaid: Number(summary?.unpaid_total ?? fallbackStats.byMode.unpaid),
+        },
+        billCount: Number(summary?.bill_count ?? fallbackStats.billCount),
+      });
+
+      if (summaryResult.error) {
+        console.warn('[IncomeDashboard] get_income_summary fallback:', summaryResult.error.message);
+      }
     } catch (err) {
       console.error('IncomeDashboard loadBills:', err);
       setError(err.message || 'Failed to load data');
@@ -143,32 +212,6 @@ export default function IncomeDashboard() {
       setLoading(false);
     }
   };
-
-  // ── Derived stats ──────────────────────────────────────────────────────────
-  const stats = useMemo(() => {
-    const totalRevenue = bills.reduce((s, b) => s + (b.grandTotal || 0), 0);
-    const collected    = bills.reduce((s, b) => {
-      if (b.status === 'paid')    return s + (b.grandTotal || 0);
-      if (b.status === 'advance') return s + (b.paidAmount || 0);
-      return s;
-    }, 0);
-    const outstanding = totalRevenue - collected;
-    const avgValue    = bills.length > 0 ? Math.round(totalRevenue / bills.length) : 0;
-
-    const byMode = { cash: 0, upi: 0, advance: 0, unpaid: 0 };
-    bills.forEach((b) => {
-      if (b.status === 'paid') {
-        if ((b.paymentMode || '').toLowerCase() === 'upi') byMode.upi  += b.grandTotal || 0;
-        else                                               byMode.cash += b.grandTotal || 0;
-      } else if (b.status === 'advance') {
-        byMode.advance += b.paidAmount || 0;
-      } else {
-        byMode.unpaid += b.grandTotal || 0;
-      }
-    });
-
-    return { totalRevenue, collected, outstanding, avgValue, byMode };
-  }, [bills]);
 
   // ── Top parts / services frequency ────────────────────────────────────────
   const topParts = useMemo(() => {
@@ -289,7 +332,7 @@ export default function IncomeDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700/75">{t('income.primaryKpi')}</p>
                   <p className="mt-2 text-3xl font-bold text-emerald-700">₹{stats.totalRevenue.toLocaleString('en-IN')}</p>
                   <p className="mt-1 text-xs text-emerald-800/70">
-                    {t('income.primaryKpiSub', { count: bills.length, period: t(`income.${period}`, { defaultValue: PERIOD_LABELS[period] }) })}
+                    {t('income.primaryKpiSub', { count: stats.billCount, period: t(`income.${period}`, { defaultValue: PERIOD_LABELS[period] }) })}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-emerald-100 p-3">
@@ -308,7 +351,7 @@ export default function IncomeDashboard() {
               <StatCard
                 icon={Receipt}
                 label={t('income.totalBills')}
-                value={bills.length}
+                value={stats.billCount}
                 sub={`${t('income.avgBillValue').toLowerCase()} ₹${stats.avgValue.toLocaleString('en-IN')}`}
                 color="text-brand-mid"
               />

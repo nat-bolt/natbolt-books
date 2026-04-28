@@ -29,18 +29,40 @@ export function openWhatsApp(phone, message) {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent || '');
 
   if (isMobile || isStandalone) {
-    const probe = document.createElement('iframe');
-    probe.style.display = 'none';
-    probe.src = appUrl;
-    document.body.appendChild(probe);
+    let appOpened = false;
+    let fallbackTimer = null;
 
-    window.setTimeout(() => {
-      if (probe.parentNode) probe.parentNode.removeChild(probe);
-    }, 1200);
+    const cleanup = () => {
+      window.removeEventListener('blur', markOpened);
+      window.removeEventListener('pagehide', markOpened);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+    };
 
-    window.setTimeout(() => {
-      if (!document.hidden) window.location.href = webUrl;
-    }, 900);
+    const markOpened = () => {
+      appOpened = true;
+      cleanup();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') markOpened();
+    };
+
+    window.addEventListener('blur', markOpened, { once: true });
+    window.addEventListener('pagehide', markOpened, { once: true });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    fallbackTimer = window.setTimeout(() => {
+      cleanup();
+      if (!appOpened && document.visibilityState === 'visible') {
+        window.location.replace(webUrl);
+      }
+    }, 1800);
+
+    window.location.href = appUrl;
 
     return;
   }

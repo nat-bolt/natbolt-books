@@ -22,6 +22,7 @@ import {
 let _dvRegB64  = null;
 let _dvBoldB64 = null;
 let _dvFailed  = false; // once failed, stop retrying on each PDF
+let _fontWarmPromise = null;
 
 async function toBase64(url) {
   const res = await fetch(url);
@@ -34,6 +35,21 @@ async function toBase64(url) {
     bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
   return btoa(bin);
+}
+
+async function warmFontBase64() {
+  if (_dvFailed) return;
+  if (!_fontWarmPromise) {
+    _fontWarmPromise = (async () => {
+      if (!_dvRegB64) _dvRegB64 = await toBase64('/fonts/DejaVuSans.ttf');
+      if (!_dvBoldB64) _dvBoldB64 = await toBase64('/fonts/DejaVuSans-Bold.ttf');
+    })().catch((err) => {
+      _dvFailed = true;
+      _fontWarmPromise = null;
+      throw err;
+    });
+  }
+  await _fontWarmPromise;
 }
 
 async function blobToDataUrl(blob) {
@@ -81,8 +97,7 @@ async function loadImageForPdf(url, outputType = 'JPEG', quality = 0.92) {
 async function loadFont(doc) {
   if (_dvFailed) return 'helvetica';
   try {
-    if (!_dvRegB64)  _dvRegB64  = await toBase64('/fonts/DejaVuSans.ttf');
-    if (!_dvBoldB64) _dvBoldB64 = await toBase64('/fonts/DejaVuSans-Bold.ttf');
+    await warmFontBase64();
     doc.addFileToVFS('DejaVuSans.ttf',      _dvRegB64);
     doc.addFileToVFS('DejaVuSans-Bold.ttf', _dvBoldB64);
     doc.addFont('DejaVuSans.ttf',      'DejaVuSans', 'normal');
@@ -93,6 +108,15 @@ async function loadFont(doc) {
     _dvFailed = true;
     return 'helvetica';
   }
+}
+
+export async function warmPdfResources() {
+  try {
+    await Promise.allSettled([
+      warmFontBase64(),
+      fetch('/icons/logo.png'),
+    ]);
+  } catch (_) {}
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

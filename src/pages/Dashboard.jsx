@@ -17,6 +17,31 @@ import { FREE_BILL_LIMIT } from '../config';
 const FREE_LIMIT = FREE_BILL_LIMIT;
 const DASHBOARD_CACHE_PREFIX = 'nb_dashboard_snapshot_v1';
 
+function buildDashboardStatsFromBills(rows) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let today = 0;
+  let month = 0;
+  let revenue = 0;
+
+  rows.forEach((row) => {
+    const createdAt = new Date(row.created_at);
+    if (createdAt >= startOfMonth) {
+      month += 1;
+      if (createdAt >= startOfToday) {
+        today += 1;
+      }
+      if (row.type === 'bill' && row.status !== 'void') {
+        revenue += Number(row.grand_total || 0);
+      }
+    }
+  });
+
+  return { today, month, revenue };
+}
+
 // ── Upgrade modal (shown when free user taps a paid feature) ──────────────────
 function UpgradeModal({ feature, onClose, onUpgrade }) {
   const { t } = useTranslation();
@@ -100,46 +125,41 @@ export default function Dashboard() {
       setLoading(true);
     }
     try {
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      // ── Two parallel queries ──────────────────────────────────────────────────
-      // 1. Recent 30 bills for the visible list (display only)
-      // 2. All bills from start of month for accurate stats
-      //    (only fetches the fields needed — avoids downloading full rows)
-      const [listResult, statsResult] = await Promise.all([
+      const [listResult, statsResult, fallbackStatsResult] = await Promise.all([
         supabase
           .from('bills')
           .select('*')
           .eq('shop_id', shop.id)
           .order('created_at', { ascending: false })
           .limit(30),
+        supabase.rpc('get_shop_dashboard_stats', { p_shop_id: shop.id }),
         supabase
           .from('bills')
           .select('id, type, status, grand_total, created_at')
           .eq('shop_id', shop.id)
-          .gte('created_at', startOfMonth.toISOString()),
+          .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
       ]);
 
       if (listResult.error) throw listResult.error;
-      if (statsResult.error) throw statsResult.error;
+      if (fallbackStatsResult.error) throw fallbackStatsResult.error;
 
       const mappedBills = (listResult.data || []).map(mapBill);
       setBills(mappedBills);
 
-      // Compute accurate stats from the full month dataset
-      let todayCount = 0, monthCount = 0, revenue = 0;
-      (statsResult.data || []).forEach((b) => {
-        const createdAt = new Date(b.created_at);
-        monthCount++;
-        if (createdAt >= startOfToday) todayCount++;
-        if (b.type === 'bill' && b.status !== 'void') {
-          revenue += Number(b.grand_total || 0);
-        }
-      });
-      const nextStats = { today: todayCount, month: monthCount, revenue };
+      const fallbackStats = buildDashboardStatsFromBills(fallbackStatsResult.data || []);
+      const dashboardStats = !statsResult.error
+        ? (Array.isArray(statsResult.data) ? statsResult.data[0] : statsResult.data)
+        : null;
+      const nextStats = {
+        today: Number(dashboardStats?.today_documents ?? fallbackStats.today),
+        month: Number(dashboardStats?.month_documents ?? fallbackStats.month),
+        revenue: Number(dashboardStats?.month_revenue ?? fallbackStats.revenue),
+      };
       setStats(nextStats);
+
+      if (statsResult.error) {
+        console.warn('[Dashboard] get_shop_dashboard_stats fallback:', statsResult.error.message);
+      }
 
       if (cacheKey) {
         localStorage.setItem(cacheKey, JSON.stringify({

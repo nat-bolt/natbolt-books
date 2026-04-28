@@ -60,6 +60,7 @@ export default function BillDetail() {
     handlePreviewPDF,
     handleClosePreview,
     handleDownloadPreview,
+    handleSharePreview,
     handleSharePdfAfterWhatsApp,
     registerWhatsAppLaunch,
   } = useDocumentPreviewShare({
@@ -482,6 +483,7 @@ export default function BillDetail() {
         pdfLoading={pdfLoading}
         onClosePreview={handleClosePreview}
         onDownloadPreview={handleDownloadPreview}
+        onSharePreview={handleSharePreview}
         showWhatsAppReturnPrompt={showWhatsAppReturnPrompt}
         onSharePdfAfterWhatsApp={handleSharePdfAfterWhatsApp}
         onCloseWhatsAppPrompt={() => setShowWhatsAppReturnPrompt(false)}

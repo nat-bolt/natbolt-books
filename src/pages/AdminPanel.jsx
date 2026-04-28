@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { useTranslation } from 'react-i18next';
 import {
   Plus, Store, RefreshCw, LogOut, ChevronRight, X,
   BarChart2, MapPin, Package, TrendingUp, ChevronDown, ChevronUp,
-  ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive, ArrowRight,
+  ExternalLink, QrCode, Upload, Image, Trash2, RotateCcw, Archive, ArrowRight, ChevronLeft,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { supabase, mapShop } from '../supabase';
@@ -20,6 +20,41 @@ import { ADDRESS_LINE_LIMIT, joinAddressLines, splitAddressForForm } from '../ut
 
 const FREE_LIMIT = FREE_BILL_LIMIT;
 const ADMIN_SHOPS_CACHE_PREFIX = 'nb_admin_shops_v1';
+
+function normalizeShopLiveStats(row) {
+  return {
+    dayBillCount: Number(row?.day_bill_count || 0),
+    weekBillCount: Number(row?.week_bill_count || 0),
+    monthBillCount: Number(row?.month_bill_count || 0),
+    dayBillAmount: Number(row?.day_bill_amount || 0),
+    weekBillAmount: Number(row?.week_bill_amount || 0),
+    monthBillAmount: Number(row?.month_bill_amount || 0),
+    dayPartsUsed: Number(row?.day_parts_used || 0),
+    weekPartsUsed: Number(row?.week_parts_used || 0),
+    monthPartsUsed: Number(row?.month_parts_used || 0),
+    totalPartsUsed: Number(row?.total_parts_used || 0),
+  };
+}
+
+function formatCurrencyCompact(value) {
+  return `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+function buildAdminStatsFromShops(active, deactivated) {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const paid = active.filter((shop) => shop.plan === 'paid').length;
+  const total = active.length;
+
+  return {
+    total,
+    paid,
+    free: active.filter((shop) => shop.plan === 'free').length,
+    newThisMonth: active.filter((shop) => new Date(shop.createdAt) >= startOfMonth).length,
+    conversionPct: total > 0 ? Math.round((paid / total) * 100) : 0,
+    deactivated: deactivated.length,
+  };
+}
 
 function SetupStepChip({ active, complete, label }) {
   const stateClass = active
@@ -46,6 +81,199 @@ function isSafeUrl(url) {
   } catch {
     return false; // not a valid URL at all
   }
+}
+
+function ShopDetailScreen({
+  shop,
+  onClose,
+  onEdit,
+  onTogglePlan,
+  onReset,
+  onDeactivate,
+  onReactivate,
+  busyShopId,
+  busyAction,
+  t,
+}) {
+  if (!shop) return null;
+
+  const periodCards = [
+    {
+      key: 'day',
+      title: t('admin.todayBills'),
+      bills: shop.liveStats.dayBillCount,
+      parts: shop.liveStats.dayPartsUsed,
+      amount: shop.liveStats.dayBillAmount,
+    },
+    {
+      key: 'week',
+      title: t('admin.weekBills'),
+      bills: shop.liveStats.weekBillCount,
+      parts: shop.liveStats.weekPartsUsed,
+      amount: shop.liveStats.weekBillAmount,
+    },
+    {
+      key: 'month',
+      title: t('admin.monthBills'),
+      bills: shop.liveStats.monthBillCount,
+      parts: shop.liveStats.monthPartsUsed,
+      amount: shop.liveStats.monthBillAmount,
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#F5F0EB]">
+      <div className="app-shell mx-auto flex w-full max-w-lg flex-col bg-[#F5F0EB]">
+        <header
+          className="sticky top-0 z-10 flex items-center gap-3 border-b border-[#E8DED3] bg-[#F5F0EB] px-4"
+          style={{ paddingTop: 'var(--safe-top)', minHeight: 'var(--header-total-height)' }}
+        >
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1 text-brand-dark active:bg-brand-light"
+            aria-label={t('common.back')}
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-lg font-bold text-brand-dark">{shop.shopName}</p>
+            <p className="truncate text-xs text-gray-500">{shop.ownerName || shop.phone}</p>
+          </div>
+          <button
+            className="rounded-xl border border-[#E8DED3] bg-white px-3 py-2 text-xs font-semibold text-brand-dark shadow-sm"
+            onClick={onEdit}
+          >
+            {t('common.edit')}
+          </button>
+        </header>
+
+        <main
+          className="flex-1 overflow-y-auto p-4"
+          style={{ paddingBottom: 'var(--screen-page-bottom)', WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge variant={shop.plan === 'paid' ? 'paid' : 'neutral'}>
+                  {shop.plan === 'paid' ? t('admin.paidShort') : t('admin.freeShort')}
+                </StatusBadge>
+                {shop.plan === 'free' ? (
+                  <StatusBadge variant="warning">
+                    {shop.billsThisMonth || 0}/{FREE_LIMIT} bills
+                  </StatusBadge>
+                ) : null}
+                {shop.deletedAt ? (
+                  <StatusBadge variant="danger">{t('admin.deactivated')}</StatusBadge>
+                ) : null}
+              </div>
+              <div className="mt-3 space-y-1 text-sm text-gray-500">
+                <p>{shop.ownerName || t('common.na')}</p>
+                <p className="font-mono text-xs">{shop.phone}</p>
+                <div className="flex items-center gap-3">
+                  {shop.pincode ? <span className="text-xs font-semibold text-indigo-600">📍 {shop.pincode}</span> : null}
+                  {shop.mapsUrl && isSafeUrl(shop.mapsUrl) ? (
+                    <a
+                      href={shop.mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-500"
+                    >
+                      Maps <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {periodCards.map((period) => (
+                <div key={period.key} className="rounded-2xl bg-white p-4 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{period.title}</p>
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{t('admin.billMetric')}</p>
+                      <p className="mt-1 text-lg font-bold text-brand-dark">{period.bills}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{t('admin.partMetric')}</p>
+                      <p className="mt-1 text-lg font-bold text-brand-dark">{period.parts}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{t('admin.amountMetric')}</p>
+                      <p className="mt-1 text-sm font-bold text-brand-dark">{formatCurrencyCompact(period.amount)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{t('admin.partsUsed')}</p>
+                <p className="mt-1 text-xl font-bold text-brand-dark">{shop.liveStats.totalPartsUsed}</p>
+                <p className="text-xs text-gray-500">{t('admin.totalUsage')}</p>
+              </div>
+            </div>
+
+            {!shop.deletedAt ? (
+              <div className="space-y-2 rounded-2xl bg-white p-4 shadow-sm">
+                {shop.plan === 'paid' ? (
+                  <>
+                    <button
+                      className="w-full rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-700"
+                      onClick={() => onTogglePlan(shop)}
+                      disabled={busyShopId === shop.id && busyAction === 'plan'}
+                    >
+                      {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.downgradeToFree')}
+                    </button>
+                    <button
+                      className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-500"
+                      onClick={() => onDeactivate(shop)}
+                      disabled={busyShopId === shop.id && busyAction === 'deactivate'}
+                    >
+                      {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="w-full rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-600"
+                      onClick={() => onTogglePlan(shop)}
+                      disabled={busyShopId === shop.id && busyAction === 'plan'}
+                    >
+                      {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.upgradeToPaid')}
+                    </button>
+                    <button
+                      className="w-full rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-bold text-blue-600"
+                      onClick={() => onReset(shop)}
+                      disabled={busyShopId === shop.id && busyAction === 'reset'}
+                    >
+                      {busyShopId === shop.id && busyAction === 'reset' ? t('admin.resetting') : t('admin.resetBillCount')}
+                    </button>
+                    <button
+                      className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-500"
+                      onClick={() => onDeactivate(shop)}
+                      disabled={busyShopId === shop.id && busyAction === 'deactivate'}
+                    >
+                      {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <button
+                  className="w-full rounded-xl border border-green-200 bg-green-50 py-3 text-sm font-bold text-green-600"
+                  onClick={() => onReactivate(shop)}
+                  disabled={busyShopId === shop.id && busyAction === 'reactivate'}
+                >
+                  {busyShopId === shop.id && busyAction === 'reactivate' ? t('admin.reactivating') : t('admin.reactivateShop')}
+                </button>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }
 
 // ── Create / Edit Shop Modal ──────────────────────────────────────────────────
@@ -878,9 +1106,17 @@ export default function AdminPanel() {
 
   const [shops, setShops] = useState([]);
   const [deactivatedShops, setDeactivatedShops] = useState([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    paid: 0,
+    free: 0,
+    newThisMonth: 0,
+    conversionPct: 0,
+  });
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | 'create' | shop object
+  const [detailShop, setDetailShop] = useState(null);
   const [busyShopId, setBusyShopId] = useState(null);
   const [busyAction, setBusyAction] = useState('');
   const [notice, setNotice] = useState(null);
@@ -897,6 +1133,7 @@ export default function AdminPanel() {
         const cached = JSON.parse(raw);
         if (Array.isArray(cached?.active)) setShops(cached.active);
         if (Array.isArray(cached?.deactivated)) setDeactivatedShops(cached.deactivated);
+        if (cached?.stats) setStats(cached.stats);
         setLoading(false);
         hasCachedSnapshot = true;
       }
@@ -913,31 +1150,65 @@ export default function AdminPanel() {
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
+  useEffect(() => {
+    if (!detailShop?.id) return;
+    const nextShop = [...shops, ...deactivatedShops].find((shop) => shop.id === detailShop.id);
+    if (nextShop) {
+      setDetailShop(nextShop);
+    }
+  }, [detailShop?.id, shops, deactivatedShops]);
+
   const loadShops = async (backgroundRefresh = false) => {
     if (!backgroundRefresh) {
       setLoading(true);
     }
     try {
-      // Load all shops first (works whether deleted_at column exists or not)
-      const { data: allShops, error } = await supabase
-        .from('shops')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [shopsResult, summaryResult, liveStatsResult] = await Promise.all([
+        supabase
+          .from('shops')
+          .select('id, phone, shop_name, owner_name, gst_number, upi_id, address, city, pincode, shop_code, maps_url, qr_code_url, shop_photo_url, plan, plan_expiry, bills_this_month, bill_count, estimate_count, deleted_at, created_at, updated_at')
+          .order('created_at', { ascending: false }),
+        supabase.rpc('get_admin_shop_summary'),
+        supabase.rpc('get_admin_shop_live_stats'),
+      ]);
 
-      if (error) throw error;
+      if (shopsResult.error) throw shopsResult.error;
 
-      const mapped = (allShops || []).map(mapShop);
-
-      // Separate active and deactivated based on deletedAt field
-      // If column doesn't exist, all shops will be active (deletedAt = null)
+      const liveStatsMap = new Map(
+        (liveStatsResult.error ? [] : (liveStatsResult.data || [])).map((row) => [row.shop_id, normalizeShopLiveStats(row)])
+      );
+      const mapped = (shopsResult.data || []).map((row) => ({
+        ...mapShop(row),
+        liveStats: liveStatsMap.get(row.id) || normalizeShopLiveStats(null),
+      }));
       const active = mapped.filter(s => !s.deletedAt);
       const deactivated = mapped.filter(s => s.deletedAt);
+      const fallbackStats = buildAdminStatsFromShops(active, deactivated);
+      const summary = !summaryResult.error
+        ? (Array.isArray(summaryResult.data) ? summaryResult.data[0] : summaryResult.data)
+        : null;
+      const nextStats = {
+        total: Number(summary?.active_shops ?? fallbackStats.total),
+        paid: Number(summary?.paid_shops ?? fallbackStats.paid),
+        free: Number(summary?.free_shops ?? fallbackStats.free),
+        newThisMonth: Number(summary?.new_this_month ?? fallbackStats.newThisMonth),
+        conversionPct: Number(summary?.conversion_pct ?? fallbackStats.conversionPct),
+      };
+
+      if (summaryResult.error) {
+        console.warn('[AdminPanel] get_admin_shop_summary fallback:', summaryResult.error.message);
+      }
+      if (liveStatsResult.error) {
+        console.warn('[AdminPanel] v_shop_live_stats fallback:', liveStatsResult.error.message);
+      }
 
       setShops(active);
       setDeactivatedShops(deactivated);
+      setStats(nextStats);
       localStorage.setItem(adminCacheKey, JSON.stringify({
         active,
         deactivated,
+        stats: nextStats,
       }));
     } catch (err) {
       console.error('loadShops error:', err);
@@ -963,6 +1234,7 @@ export default function AdminPanel() {
       }
       return [saved, ...prev];
     });
+    loadShops(true);
   };
 
   const togglePlan = async (shop) => {
@@ -978,6 +1250,7 @@ export default function AdminPanel() {
       if (error) throw error;
 
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, plan: newPlan } : s));
+      loadShops(true);
       setNotice({
         tone: 'success',
         title: newPlan === 'paid' ? t('admin.planUpgraded') : t('admin.planDowngraded'),
@@ -1011,6 +1284,7 @@ export default function AdminPanel() {
       if (error) throw error;
 
       setShops((prev) => prev.map((s) => s.id === shop.id ? { ...s, billsThisMonth: 0 } : s));
+      loadShops(true);
       setNotice({
         tone: 'success',
         title: t('admin.billCountReset'),
@@ -1103,20 +1377,9 @@ export default function AdminPanel() {
     navigate('/login', { replace: true });
   };
 
-  // ── Computed stats ──────────────────────────────────────────────────────────
-  const stats = useMemo(() => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    return {
-      total:        shops.length,
-      paid:         shops.filter((s) => s.plan === 'paid').length,
-      free:         shops.filter((s) => s.plan === 'free').length,
-      newThisMonth: shops.filter((s) => new Date(s.createdAt) >= startOfMonth).length,
-      conversionPct: shops.length > 0
-        ? Math.round((shops.filter((s) => s.plan === 'paid').length / shops.length) * 100)
-        : 0,
-    };
-  }, [shops]);
+  const openShopDetail = (shop) => {
+    setDetailShop(shop);
+  };
 
   if (authLoading) return (
     <Layout title={t('admin.title')} showNav={false} showLanguage={false}>
@@ -1215,11 +1478,15 @@ export default function AdminPanel() {
           ) : (
             <div className="space-y-2">
               {shops.map((shop) => (
-                <div key={shop.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <button
+                  key={shop.id}
+                  className="w-full rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:bg-gray-50"
+                  onClick={() => openShopDetail(shop)}
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-brand-dark truncate">{shop.shopName}</p>
+                        <p className="truncate font-bold text-brand-dark">{shop.shopName}</p>
                         <StatusBadge variant={shop.plan === 'paid' ? 'paid' : 'neutral'}>
                           {shop.plan === 'paid' ? t('admin.paidShort') : t('admin.freeShort')}
                         </StatusBadge>
@@ -1231,78 +1498,12 @@ export default function AdminPanel() {
                       </div>
                       <p className="text-sm text-gray-500">{shop.ownerName}</p>
                       <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
-
-                      {/* Pincode + Maps link row */}
-                      <div className="flex items-center gap-3 mt-0.5">
-                        {shop.pincode && (
-                          <p className="text-xs text-indigo-600 font-semibold">📍 {shop.pincode}</p>
-                        )}
-                        {shop.mapsUrl && isSafeUrl(shop.mapsUrl) && (
-                          <a
-                            href={shop.mapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-500 flex items-center gap-0.5"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Maps <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-
                     </div>
-                    <button
-                      className="inline-flex items-center gap-1 rounded-xl border border-[#E8DED3] bg-[#F8F3EC] px-2.5 py-2 text-xs font-semibold text-brand-dark shadow-sm"
-                      onClick={() => setModal(shop)}
-                    >
-                      {t('common.edit')}
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E8DED3] bg-[#F8F3EC] text-brand-dark shadow-sm">
+                      <ChevronRight className="h-5 w-5" />
+                    </span>
                   </div>
-
-                  {shop.plan === 'paid' ? (
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        className="w-full rounded-xl py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-200"
-                        onClick={() => setConfirmState({ type: 'deactivate', shop })}
-                        disabled={busyShopId === shop.id && busyAction === 'deactivate'}
-                      >
-                        {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
-                      </button>
-                      <button
-                        className="w-full rounded-xl py-2 text-xs font-bold bg-gray-100 text-gray-600"
-                        onClick={() => togglePlan(shop)}
-                        disabled={busyShopId === shop.id && busyAction === 'plan'}
-                      >
-                        {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.downgradeToFree')}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <button
-                        className="w-full rounded-xl py-2 text-xs font-bold bg-amber-50 text-amber-600 border border-amber-200"
-                        onClick={() => togglePlan(shop)}
-                        disabled={busyShopId === shop.id && busyAction === 'plan'}
-                      >
-                        {busyShopId === shop.id && busyAction === 'plan' ? t('admin.updating') : t('admin.upgradeToPaid')}
-                      </button>
-                      <button
-                        className="w-full rounded-xl py-2 text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200"
-                        onClick={() => setConfirmState({ type: 'reset', shop })}
-                        disabled={busyShopId === shop.id && busyAction === 'reset'}
-                      >
-                        {busyShopId === shop.id && busyAction === 'reset' ? t('admin.resetting') : t('admin.resetBillCount')}
-                      </button>
-                      <button
-                        className="w-full rounded-xl py-2 text-xs font-bold text-red-500 bg-red-50 border border-red-200"
-                        onClick={() => setConfirmState({ type: 'deactivate', shop })}
-                        disabled={busyShopId === shop.id && busyAction === 'deactivate'}
-                      >
-                        {busyShopId === shop.id && busyAction === 'deactivate' ? t('admin.deactivating') : t('admin.deactivateShop')}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -1331,18 +1532,20 @@ export default function AdminPanel() {
             {showDeactivated && (
               <div className="px-4 pb-4 space-y-2">
                 {deactivatedShops.map((shop) => (
-                  <div key={shop.id} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
+                  <button
+                    key={shop.id}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left"
+                    onClick={() => openShopDetail(shop)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-gray-700 truncate">{shop.shopName}</p>
-                          <StatusBadge variant="danger">
-                            {t('admin.deactivated')}
-                          </StatusBadge>
+                          <p className="truncate font-bold text-gray-700">{shop.shopName}</p>
+                          <StatusBadge variant="danger">{t('admin.deactivated')}</StatusBadge>
                         </div>
                         <p className="text-sm text-gray-500">{shop.ownerName}</p>
                         <p className="text-xs text-gray-400 font-mono">{shop.phone}</p>
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="mt-1 text-xs text-gray-400">
                           {t('admin.deactivatedOn')}: {new Date(shop.deletedAt).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
@@ -1350,17 +1553,11 @@ export default function AdminPanel() {
                           })}
                         </p>
                       </div>
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500">
+                        <ChevronRight className="h-5 w-5" />
+                      </span>
                     </div>
-
-                    <button
-                      className="w-full mt-3 py-2 rounded-xl text-xs font-bold bg-green-50 text-green-600 border border-green-200 flex items-center justify-center gap-1.5"
-                      onClick={() => setConfirmState({ type: 'reactivate', shop })}
-                      disabled={busyShopId === shop.id && busyAction === 'reactivate'}
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      {busyShopId === shop.id && busyAction === 'reactivate' ? t('admin.reactivating') : t('admin.reactivateShop')}
-                    </button>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -1376,6 +1573,22 @@ export default function AdminPanel() {
           onClose={() => setModal(null)}
         />
       )}
+
+      <ShopDetailScreen
+        shop={detailShop}
+        onClose={() => setDetailShop(null)}
+        onEdit={() => {
+          setModal(detailShop);
+          setDetailShop(null);
+        }}
+        onTogglePlan={togglePlan}
+        onReset={(shop) => setConfirmState({ type: 'reset', shop })}
+        onDeactivate={(shop) => setConfirmState({ type: 'deactivate', shop })}
+        onReactivate={(shop) => setConfirmState({ type: 'reactivate', shop })}
+        busyShopId={busyShopId}
+        busyAction={busyAction}
+        t={t}
+      />
 
       <ConfirmSheet
         open={!!confirmState}

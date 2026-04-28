@@ -15,6 +15,7 @@ export default function DocumentPreviewLayer({
   pdfLoading,
   onClosePreview,
   onDownloadPreview,
+  onSharePreview,
   showWhatsAppReturnPrompt,
   onSharePdfAfterWhatsApp,
   onCloseWhatsAppPrompt,
@@ -27,6 +28,7 @@ export default function DocumentPreviewLayer({
         loading={pdfLoading}
         onClose={onClosePreview}
         onDownload={onDownloadPreview}
+        onShare={onSharePreview}
       />
       <WhatsAppReturnPrompt
         open={showWhatsAppReturnPrompt}
