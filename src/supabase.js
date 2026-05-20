@@ -96,6 +96,7 @@ export function mapVehicle(row) {
     vehicleType:  row.vehicle_type,
     vehicleBrand: row.vehicle_brand,
     vehicleModel: row.vehicle_model,
+    odoReading:   row.odo_reading != null ? String(row.odo_reading) : '',
     year:         row.year,
     color:        row.color,
     notes:        row.notes,

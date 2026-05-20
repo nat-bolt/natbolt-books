@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Phone, FileText, Receipt,
   ChevronRight, Calendar, IndianRupee,
-  Plus, X, Bike, Lock, Crown, Clock3,
+  Plus, X, Bike, Lock, Crown, Clock3, Pencil,
 } from 'lucide-react';
 import { supabase, mapCustomer, mapBill, mapVehicle } from '../supabase';
 import useStore from '../store/useStore';
@@ -52,6 +52,105 @@ function StatCard({ icon: Icon, label, value, color = 'text-brand-dark' }) {
       <Icon className={`w-5 h-5 mx-auto mb-1 ${color}`} />
       <p className={`text-xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+function EditPhoneModal({ customer, shopId, onSaved, onClose }) {
+  const { t } = useTranslation();
+  const [phone, setPhone] = useState(customer?.phone || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    const nextPhone = phone.replace(/\D/g, '');
+    if (nextPhone.length !== 10) {
+      setError(t('customer.invalidPhone'));
+      return;
+    }
+
+    if (nextPhone === (customer?.phone || '')) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const { data, error: updateErr } = await supabase
+        .from('customers')
+        .update({ phone: nextPhone })
+        .eq('id', customer.id)
+        .eq('shop_id', shopId)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+      onSaved(mapCustomer(data));
+      onClose();
+    } catch (err) {
+      console.error('Edit customer phone error:', err);
+      if (err.code === '23505') {
+        setError(t('customer.duplicatePhone'));
+      } else {
+        setError(err.message || t('common.error'));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-3xl bg-white px-5 pt-5 shadow-2xl"
+        style={{
+          maxHeight: 'min(420px, calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 32px))',
+          paddingBottom: 'calc(var(--safe-bottom) + 20px)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 -mx-5 mb-5 flex items-center justify-between rounded-t-3xl bg-white px-5 pb-3 pt-1">
+          <h2 className="text-lg font-bold text-brand-dark">{t('customerProfile.editPhone')}</h2>
+          <button onClick={onClose}><X className="h-5 w-5 text-gray-400" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm text-gray-500">{t('customerProfile.editPhoneHint')}</p>
+          <div>
+            <label className="section-label">{t('customer.phone')}</label>
+            <input
+              className="input-field"
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder={t('customer.phonePlaceholder')}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
+        </div>
+
+        {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
+
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700"
+            onClick={onClose}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn-primary flex-1"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? t('settings.saving') : t('common.save')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -264,6 +363,7 @@ export default function CustomerProfile() {
   const [bills, setBills]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [showEditPhone, setShowEditPhone] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('all');
 
   useEffect(() => {
@@ -319,6 +419,11 @@ export default function CustomerProfile() {
   const handleVehicleSaved = (v) => {
     setVehicles((prev) => [...prev, v]);
     setShowAddVehicle(false);
+  };
+
+  const handleCustomerSaved = (nextCustomer) => {
+    setCustomer(nextCustomer);
+    setShowEditPhone(false);
   };
 
   const totalSpent = bills
@@ -400,9 +505,19 @@ export default function CustomerProfile() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-lg font-bold text-brand-dark">{customer.name}</p>
-                  {customer.phone ? (
-                    <p className="mt-1 text-sm text-gray-500 font-mono">{customer.phone}</p>
-                  ) : null}
+                  <div className="mt-1 flex items-center gap-2">
+                    {customer.phone ? (
+                      <p className="text-sm font-mono text-gray-500">{customer.phone}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-light p-1.5 text-brand-mid"
+                      onClick={() => setShowEditPhone(true)}
+                      title={t('customerProfile.editPhone')}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 {outstanding > 0 ? (
                   <StatusBadge variant="danger" size="md">₹{Math.round(outstanding)}</StatusBadge>
@@ -597,6 +712,15 @@ export default function CustomerProfile() {
           onClose={() => setShowAddVehicle(false)}
         />
       )}
+
+      {showEditPhone && customer ? (
+        <EditPhoneModal
+          customer={customer}
+          shopId={shop.id}
+          onSaved={handleCustomerSaved}
+          onClose={() => setShowEditPhone(false)}
+        />
+      ) : null}
     </Layout>
   );
 }

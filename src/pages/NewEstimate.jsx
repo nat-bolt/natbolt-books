@@ -11,6 +11,8 @@ import InlineNotice from '../components/InlineNotice';
 import { VEHICLE_TYPES, getBrandsForType, getModelsForBrand } from '../data/vehicles';
 import { importCustomerIntoShop, searchSharedDirectory } from '../utils/customerDirectory';
 import { optimizeJobPhoto } from '../utils/jobPhoto';
+import { includesSearchText } from '../utils/searchText';
+import useKeyboardAwareModal from '../hooks/useKeyboardAwareModal';
 
 // ── Upgrade wall (shown when free user tries to create an estimate) ──────────
 function UpgradeWall({ onUpgrade }) {
@@ -141,6 +143,7 @@ function CustomerModal({ onSelect, onClose }) {
   const [vType,  setVType]  = useState('scooter');
   const [vBrand, setVBrand] = useState('');
   const [vModel, setVModel] = useState('');
+  const [vOdo,   setVOdo]   = useState('');
 
   const handleTypeChange  = (e) => { setVType(e.target.value); setVBrand(''); setVModel(''); };
   const handleBrandChange = (e) => { setVBrand(e.target.value); setVModel(''); };
@@ -223,6 +226,7 @@ function CustomerModal({ onSelect, onClose }) {
             vehicle_type:  vType   || null,
             vehicle_brand: resolvedBrand.trim() || null,
             vehicle_model: resolvedModel.trim() || null,
+            odo_reading:   vOdo.trim() ? Number.parseInt(vOdo.trim(), 10) : null,
           })
           .select()
           .single();
@@ -412,6 +416,24 @@ function CustomerModal({ onSelect, onClose }) {
                     onChange={(e) => setVModel(e.target.value)} />
                 )}
               </div>
+
+              <div>
+                <label className="section-label">{t('vehicle.odoReading')}</label>
+                <div className="relative">
+                  <input
+                    className="input-field pr-12"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder={t('vehicle.odoPlaceholder')}
+                    value={vOdo}
+                    onChange={(e) => setVOdo(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={dismissKeyboardOnEnter}
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                    {t('vehicle.odoUnit')}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {createError && <p className="text-red-500 text-sm">{createError}</p>}
@@ -436,12 +458,13 @@ function PartsModal({ catalogue, onAdd, onClose }) {
   const [cat, setCat]       = useState('all');
   const [custom, setCustom] = useState({ name: '', qty: '1', price: '' });
   const [mode, setMode]     = useState('catalogue'); // 'catalogue' | 'custom'
+  const searchInputRef = useRef(null);
+  const { keyboardOffset, modalRef, ensureVisible } = useKeyboardAwareModal();
 
   const CATEGORY_LIST = ['all', 'oil', 'engine', 'brakes', 'tyres', 'body', 'electricals', 'custom'];
 
   const filtered = catalogue.filter((p) => {
-    const name = getPartName(p, language).toLowerCase();
-    const matchSearch = !search || name.includes(search.toLowerCase());
+    const matchSearch = includesSearchText(getPartName(p, language), search);
     const displayCat  = p.category || 'custom';
     const matchCat    = cat === 'all' || displayCat === cat;
     return matchSearch && matchCat;
@@ -460,11 +483,13 @@ function PartsModal({ catalogue, onAdd, onClose }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className={`fixed inset-0 z-50 flex bg-black/50 px-4 pt-4 ${keyboardOffset ? 'items-start justify-center' : 'items-center justify-center'}`}
+      style={{ paddingBottom: `calc(var(--safe-bottom) + 16px + ${keyboardOffset}px)` }}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl p-5 max-h-[80vh] flex flex-col"
+        ref={modalRef}
+        className="flex max-h-[80vh] flex-col overflow-y-auto rounded-3xl bg-white p-5"
         style={{ width: 'calc(100vw - 32px)', maxWidth: '480px' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -492,8 +517,14 @@ function PartsModal({ catalogue, onAdd, onClose }) {
           <>
             <div className="relative mb-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input className="input-field pl-9 py-2" placeholder={t('parts.search')}
-                value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input
+                ref={searchInputRef}
+                className="input-field pl-9 py-2"
+                placeholder={t('parts.search')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => ensureVisible(searchInputRef.current)}
+              />
             </div>
             <div className="mb-3">
               <div className="overflow-x-auto overflow-y-hidden scrollbar-hide -mx-1 px-1 pb-3">
@@ -1092,6 +1123,7 @@ export default function NewEstimate() {
     setError('');
     setLoading(true);
     try {
+      const parsedOdoReading = odoReading.trim() ? Number.parseInt(odoReading.trim(), 10) : null;
       let vehicleId    = null;
       let vehicleNo    = '';
       let vehicleType  = '';
@@ -1109,6 +1141,7 @@ export default function NewEstimate() {
             vehicle_type:  vehicle.type  || null,
             vehicle_brand: vehicle.brand.trim() || null,
             vehicle_model: vehicle.model.trim() || null,
+            odo_reading:   isBill ? parsedOdoReading : null,
           })
           .select()
           .single();
@@ -1148,7 +1181,7 @@ export default function NewEstimate() {
         vehicle_type:   vehicleType,
         vehicle_brand:  vehicleBrand,
         vehicle_model:  vehicleModel,
-        odo_reading:    odoReading.trim() ? Number.parseInt(odoReading.trim(), 10) : null,
+        odo_reading:    parsedOdoReading,
         vehicle_id:     vehicleId,
         items:          isBill ? parts : [],
         parts_subtotal: isBill ? partsSubtotal : 0,
@@ -1173,6 +1206,15 @@ export default function NewEstimate() {
         .select()
         .single();
       if (insertErr) throw insertErr;
+
+      if (isBill && vehicleId) {
+        const { error: vehicleOdoErr } = await supabase
+          .from('vehicles')
+          .update({ odo_reading: parsedOdoReading })
+          .eq('id', vehicleId)
+          .eq('shop_id', shop.id);
+        if (vehicleOdoErr) throw vehicleOdoErr;
+      }
 
       let jobPhotoUrl = null;
 

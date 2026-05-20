@@ -50,6 +50,7 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
   const [vType,  setVType]  = useState('scooter');
   const [vBrand, setVBrand] = useState('');
   const [vModel, setVModel] = useState('');
+  const [vOdo,   setVOdo]   = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
@@ -121,6 +122,7 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
             vehicle_type:  vType  || null,
             vehicle_brand: resolvedBrand || null,
             vehicle_model: (vModel === '__other__' ? '' : vModel.trim()) || null,
+            odo_reading:   vOdo.trim() ? Number.parseInt(vOdo.trim(), 10) : null,
           })
           .select()
           .single();
@@ -253,6 +255,23 @@ function AddCustomerModal({ shop, onSaved, onClose }) {
                   value={vModel === '__other__' ? '' : vModel}
                   onChange={(e) => setVModel(e.target.value)} />
               )}
+            </div>
+
+            <div>
+              <label className="section-label">{t('vehicle.odoReading')}</label>
+              <div className="relative">
+                <input
+                  className="input-field pr-12"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder={t('vehicle.odoPlaceholder')}
+                  value={vOdo}
+                  onChange={(e) => setVOdo(e.target.value.replace(/\D/g, ''))}
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                  {t('vehicle.odoUnit')}
+                </span>
+              </div>
             </div>
           </div>
         </div>

@@ -387,6 +387,8 @@
     "title": "Service History",
     "paidFeatureTitle": "Customer profiles are a paid feature",
     "paidFeatureBody": "Upgrade to view detailed customer profiles, manage vehicle history, and unlock unlimited billing.",
+    "editPhone": "Edit Mobile Number",
+    "editPhoneHint": "Update the customer's mobile number safely. Existing bills keep their original saved number.",
     "vehicles": "Registered Vehicles",
     "totalBills": "Bills",
     "estimates": "Job Cards",

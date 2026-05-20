@@ -6,6 +6,7 @@ import Layout from '../components/Layout';
 import { supabase } from '../supabase';
 import ConfirmSheet from '../components/ConfirmSheet';
 import StatusBadge from '../components/StatusBadge';
+import { includesSearchText } from '../utils/searchText';
 
 // ── Language-aware part name ───────────────────────────────────────────────────
 function getPartName(part, language) {
@@ -288,8 +289,7 @@ export default function PartsCatalogue() {
       ...p,
       displayCategory: p.category || 'custom',
     })).filter((p) => {
-      const name = getPartName(p, language).toLowerCase();
-      const matchSearch = !search || name.includes(search.toLowerCase());
+      const matchSearch = includesSearchText(getPartName(p, language), search);
       const matchCat    = cat === 'all' || p.displayCategory === cat;
       return matchSearch && matchCat;
     });

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
+import { includesSearchText } from '../utils/searchText';
+import useKeyboardAwareModal from '../hooks/useKeyboardAwareModal';
 
 const DEFAULT_CATEGORIES = ['all', 'oil', 'engine', 'brakes', 'tyres', 'body', 'electricals', 'other'];
 
@@ -21,6 +23,8 @@ export default function CatalogueModal({
   const { t } = useTranslation();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('all');
+  const searchInputRef = useRef(null);
+  const { keyboardOffset, modalRef, ensureVisible } = useKeyboardAwareModal();
 
   const categories = [
     ...DEFAULT_CATEGORIES,
@@ -35,17 +39,21 @@ export default function CatalogueModal({
   ];
 
   const filtered = catalogue.filter((p) => {
-    const nameMatches = (p.name || '').toLowerCase().includes(q.toLowerCase());
+    const nameMatches = includesSearchText(p.name, q);
     const partCategory = String(p.category || 'other').trim().toLowerCase() || 'other';
     const categoryMatches = category === 'all' || partCategory === category;
     return nameMatches && categoryMatches;
   });
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[80] flex items-end bg-black/50 px-3 pt-6"
+      style={{ paddingBottom: `calc(var(--safe-bottom) + 12px + ${keyboardOffset}px)` }}
+      onClick={onClose}
+    >
       <div
-        className="mx-auto flex max-h-[76vh] w-full max-w-lg flex-col rounded-t-2xl bg-white p-4 shadow-2xl"
-        style={{ paddingBottom: 'calc(var(--safe-bottom) + 12px)' }}
+        ref={modalRef}
+        className="mx-auto flex max-h-[76vh] w-full max-w-lg flex-col overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -55,10 +63,12 @@ export default function CatalogueModal({
           </button>
         </div>
         <input
+          ref={searchInputRef}
           className="input-field mb-3"
           placeholder={searchPlaceholder}
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          onFocus={() => ensureVisible(searchInputRef.current)}
           autoFocus
         />
         <div className="-mx-1 mb-3 overflow-x-auto overflow-y-hidden px-1 pb-3">
